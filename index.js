@@ -1,174 +1,126 @@
-console.log("🔥🔥🔥 I AM RUNNING backend/index.js 🔥🔥🔥");
+/**
+ * Load environment variables
+ */
+require("dotenv").config();
 
 const express = require("express");
+const cors = require("cors");
+const jwt = require("jsonwebtoken");
+
 const app = express();
 
-/**
- * Enable JSON body parsing
- */
+/* ===============================
+   Environment Variables
+================================ */
+const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || "development";
+const JWT_SECRET = process.env.JWT_SECRET;
+const CORS_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : ["*"];
+
+/* ===============================
+   Middleware
+================================ */
+app.use(
+  cors({
+    origin: CORS_ORIGINS,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
 
-/**
- * Authentication middleware
- */
-function authenticate(req, res, next) {
-  const token = req.headers["authorization"];
+/* ===============================
+   Auth Middleware
+================================ */
+function auth(req, res, next) {
+  const header = req.headers.authorization;
 
-  if (!token) {
-    return res.status(401).json({ message: "Access denied. No token provided." });
+  if (!header) {
+    return res.status(401).json({ message: "No token provided" });
   }
 
-  if (token !== "secure-token") {
-    return res.status(403).json({ message: "Invalid token." });
-  }
+  const token = header.split(" ")[1];
 
-  next();
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
 }
 
-/**
- * Temporary job data
- */
-const jobs = [
-  { id: 1, title: "Software Engineer", location: "Remote", experience: "3+" },
-  { id: 2, title: "Backend Developer", location: "Germany", experience: "5+" },
-  { id: 3, title: "Frontend Developer", location: "Remote", experience: "2+" }
-];
-
-/**
- * Temporary applications storage
- */
-const applications = [];
-
-/**
- * Root route
- */
+/* ===============================
+   Root / Health Check
+================================ */
 app.get("/", (req, res) => {
-  res.send("Backend is running successfully");
-});
-
-/**
- * GET /jobs
- */
-app.get("/jobs", authenticate, (req, res) => {
-  try {
-    let filteredJobs = jobs;
-
-    const { location, experience } = req.query;
-
-    if (location) {
-      filteredJobs = filteredJobs.filter(
-        job => job.location.toLowerCase() === location.toLowerCase()
-      );
-    }
-
-    if (experience) {
-      filteredJobs = filteredJobs.filter(
-        job => job.experience === experience
-      );
-    }
-
-    res.status(200).json({
-      success: true,
-      count: filteredJobs.length,
-      data: filteredJobs
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching jobs"
-    });
-  }
-});
-
-/**
- * GET /jobs/:id
- */
-app.get("/jobs/:id", authenticate, (req, res) => {
-  const jobId = Number(req.params.id);
-
-  if (Number.isNaN(jobId)) {
-    return res.status(400).json({
-      success: false,
-      message: "Job ID must be a number"
-    });
-  }
-
-  const job = jobs.find(j => j.id === jobId);
-
-  if (!job) {
-    return res.status(404).json({
-      success: false,
-      message: "Job not found"
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    data: job
+  res.json({
+    status: "OK",
+    message: "Backend is running",
+    environment: NODE_ENV,
   });
 });
 
-/**
- * POST /jobs/:id/apply
- */
-app.post("/jobs/:id/apply", authenticate, (req, res) => {
-  try {
-    const jobId = Number(req.params.id);
+/* ===============================
+   Auth Routes (TEMP – Phase 2)
+================================ */
+app.post("/auth/login", (req, res) => {
+  const { email } = req.body;
 
-    if (Number.isNaN(jobId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Job ID must be a number"
-      });
-    }
-
-    const job = jobs.find(j => j.id === jobId);
-
-    if (!job) {
-      return res.status(404).json({
-        success: false,
-        message: "Job not found"
-      });
-    }
-
-    const { candidateName, email, resumeUrl } = req.body;
-
-    if (!candidateName || !email) {
-      return res.status(400).json({
-        success: false,
-        message: "candidateName and email are required"
-      });
-    }
-
-    const application = {
-      id: applications.length + 1,
-      jobId,
-      candidateName,
+  // Mock login (replace later with DB validation)
+  const token = jwt.sign(
+    {
+      id: 1,
       email,
-      resumeUrl: resumeUrl || null,
-      status: "APPLIED",
-      appliedAt: new Date().toISOString()
-    };
+    },
+    JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    }
+  );
 
-    applications.push(application);
+  res.json({ token });
+});
 
-    res.status(201).json({
-      success: true,
-      message: "Application submitted successfully",
-      data: application
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error while applying to job"
-    });
-  }
+/* ===============================
+   Jobs Routes
+================================ */
+app.get("/jobs", (req, res) => {
+  res.json([
+    { id: 1, title: "Software Engineer", location: "Cairo" },
+    { id: 2, title: "Frontend Developer", location: "Remote" },
+    { id: 3, title: "Backend Developer", location: "Alexandria" },
+  ]);
 });
 
 /**
- * Server start (always last)
+ * Apply to Job (Protected)
  */
-const PORT = 3000;
+app.post("/jobs/:id/apply", auth, (req, res) => {
+  const jobId = req.params.id;
+
+  res.json({
+    success: true,
+    message: `Application submitted successfully for job ${jobId}`,
+    user: req.user,
+  });
+});
+
+/* ===============================
+   404 Handler
+================================ */
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route not found",
+  });
+});
+
+/* ===============================
+   Start Server
+================================ */
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
 });

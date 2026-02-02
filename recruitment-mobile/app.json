@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "recruitment-mobile",
-    "slug": "recruitment-mobile",
+    "slug": "recruitment-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,6 +43,19 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "619ab044-4448-4ec5-8120-4b974b65dc08"
+      }
+    },
+    "owner": "recruitment-app",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/619ab044-4448-4ec5-8120-4b974b65dc08"
     }
   }
 }

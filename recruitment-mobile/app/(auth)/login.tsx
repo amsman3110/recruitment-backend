@@ -16,6 +16,10 @@ export default function LoginScreen() {
     // Real login will be implemented later
   }
 
+  function handleGoToRegister() {
+    router.push("/(auth)/register");
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
@@ -35,6 +39,12 @@ export default function LoginScreen() {
 
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={handleGoToRegister}>
+        <Text style={styles.registerText}>
+          Don’t have an account? <Text style={styles.registerLink}>Create one</Text>
+        </Text>
       </TouchableOpacity>
 
       <Text style={styles.devHint}>
@@ -76,6 +86,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
+  },
+  registerText: {
+    marginTop: 20,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#444444",
+  },
+  registerLink: {
+    color: "#007AFF",
+    fontWeight: "600",
   },
   devHint: {
     marginTop: 16,

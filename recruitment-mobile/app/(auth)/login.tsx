@@ -1,19 +1,21 @@
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const DEV_LOGIN_BYPASS = true; // 👈 DEV ONLY
+const DEV_LOGIN_BYPASS = true;
 
 export default function LoginScreen() {
   const router = useRouter();
 
   function handleLogin() {
     if (DEV_LOGIN_BYPASS) {
-      // ✅ Go to the REAL home: app/(tabs)/index.tsx
       router.replace("/(tabs)");
-      return;
     }
-
-    // Real login will be implemented later
   }
 
   function handleGoToRegister() {
@@ -25,15 +27,17 @@ export default function LoginScreen() {
       <Text style={styles.title}>Login</Text>
 
       <TextInput
-        placeholder="Email Address"
         style={styles.input}
+        placeholder="Email Address"
+        placeholderTextColor="#999999"
         autoCapitalize="none"
         keyboardType="email-address"
       />
 
       <TextInput
-        placeholder="Password"
         style={styles.input}
+        placeholder="Password"
+        placeholderTextColor="#999999"
         secureTextEntry
       />
 
@@ -43,7 +47,7 @@ export default function LoginScreen() {
 
       <TouchableOpacity onPress={handleGoToRegister}>
         <Text style={styles.registerText}>
-          Don’t have an account? <Text style={styles.registerLink}>Create one</Text>
+          Don't have an account? Create one
         </Text>
       </TouchableOpacity>
 
@@ -57,7 +61,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
     padding: 24,
     justifyContent: "center",
   },
@@ -66,14 +69,17 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 32,
     textAlign: "center",
+    color: "#007AFF",
   },
   input: {
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#cccccc",
+    borderColor: "#CCCCCC",
     borderRadius: 8,
     padding: 14,
     fontSize: 16,
     marginBottom: 16,
+    color: "#000000",
   },
   button: {
     backgroundColor: "#007AFF",
@@ -82,7 +88,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
@@ -91,16 +97,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     textAlign: "center",
     fontSize: 14,
-    color: "#444444",
-  },
-  registerLink: {
-    color: "#007AFF",
-    fontWeight: "600",
+    color: "#CCCCCC",
   },
   devHint: {
     marginTop: 16,
     textAlign: "center",
     fontSize: 12,
-    color: "#888888",
+    color: "#AAAAAA",
   },
 });

@@ -7,6 +7,11 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
+/**
+ * Database (BE-027)
+ */
+const { initDb } = require("./src/db");
+
 const app = express();
 
 /* ===============================
@@ -65,12 +70,41 @@ app.get("/", (req, res) => {
 });
 
 /* ===============================
-   Auth Routes (TEMP – Phase 2)
+   Auth Routes (Phase 3)
 ================================ */
+
+/**
+ * REGISTER (MB-025)
+ */
+app.post("/auth/register", (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({
+      message: "Name, email, and password are required",
+    });
+  }
+
+  // 🔴 TEMP: No DB insert yet (BE-028 will handle this)
+  // BE-027 only ensures the table exists
+
+  return res.status(201).json({
+    success: true,
+    message: "User registered successfully",
+    user: {
+      id: 1,
+      name,
+      email,
+    },
+  });
+});
+
+/**
+ * LOGIN
+ */
 app.post("/auth/login", (req, res) => {
   const { email } = req.body;
 
-  // Mock login (replace later with DB validation)
   const token = jwt.sign(
     {
       id: 1,
@@ -119,8 +153,17 @@ app.use((req, res) => {
 });
 
 /* ===============================
-   Start Server
+   Start Server (BE-027)
 ================================ */
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
-});
+initDb()
+  .then(() => {
+    console.log("Database initialized");
+
+    app.listen(PORT, () => {
+      console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
+    });
+  })
+  .catch((err) => {
+    console.error("Database initialization failed", err);
+    process.exit(1);
+  });

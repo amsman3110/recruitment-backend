@@ -39,7 +39,13 @@ export default function RootLayout() {
   */
 
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        contentStyle: {
+          backgroundColor: "#1E1E2A", // 🌫️ Global app background (non-white)
+        },
+      }}
+    >
       <Stack.Screen
         name="(auth)"
         options={{ headerShown: false }}

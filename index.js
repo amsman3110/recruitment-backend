@@ -53,7 +53,6 @@ app.post("/auth/login", (req, res) => {
 
 /**
  * GET candidate profile
- * Phase 3: returns the first candidate
  */
 app.get("/candidate/profile", async (req, res) => {
   try {
@@ -61,11 +60,7 @@ app.get("/candidate/profile", async (req, res) => {
       "SELECT * FROM candidates LIMIT 1"
     );
 
-    if (result.rows.length === 0) {
-      return res.json({});
-    }
-
-    res.json(result.rows[0]);
+    res.json(result.rows[0] || {});
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to load profile" });
@@ -74,6 +69,7 @@ app.get("/candidate/profile", async (req, res) => {
 
 /**
  * UPDATE candidate profile
+ * Phase 3: store arrays as TEXT
  */
 app.put("/candidate/profile", async (req, res) => {
   const {
@@ -112,8 +108,12 @@ app.put("/candidate/profile", async (req, res) => {
         current_job_title,
         specialization,
         profile_summary,
-        technical_skills,
-        soft_skills,
+        Array.isArray(technical_skills)
+          ? technical_skills.join(", ")
+          : "",
+        Array.isArray(soft_skills)
+          ? soft_skills.join(", ")
+          : "",
         experience,
         education,
         courses,
@@ -123,7 +123,7 @@ app.put("/candidate/profile", async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error("UPDATE PROFILE ERROR:", err);
     res.status(500).json({ message: "Failed to update profile" });
   }
 });

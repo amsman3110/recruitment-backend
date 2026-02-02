@@ -1,6 +1,3 @@
-/**
- * Load environment variables
- */
 require("dotenv").config();
 
 const express = require("express");
@@ -10,18 +7,34 @@ const pool = require("./src/db");
 
 const app = express();
 
-/* ===============================
-   Environment Variables
-================================ */
 const PORT = process.env.PORT || 3000;
-const NODE_ENV = process.env.NODE_ENV || "development";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
-/* ===============================
-   Middleware
-================================ */
 app.use(cors());
 app.use(express.json());
+
+/* ===============================
+   Helpers (CRITICAL)
+================================ */
+function safeJson(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
 
 /* ===============================
    Auth Middleware
@@ -40,27 +53,22 @@ function auth(req, res, next) {
 }
 
 /* ===============================
-   Health Check
+   Health
 ================================ */
 app.get("/", (_req, res) => {
-  res.json({ status: "OK", env: NODE_ENV });
+  res.json({ status: "OK" });
 });
 
 /* ===============================
-   AUTH
+   Login
 ================================ */
-app.post("/auth/login", (req, res) => {
-  const { email } = req.body;
-
-  const token = jwt.sign({ id: 1, email }, JWT_SECRET, {
-    expiresIn: "7d",
-  });
-
+app.post("/auth/login", (_req, res) => {
+  const token = jwt.sign({ id: 1 }, JWT_SECRET, { expiresIn: "7d" });
   res.json({ token });
 });
 
 /* ===============================
-   SAVE CANDIDATE PROFILE
+   Save Profile
 ================================ */
 app.post("/profile", auth, async (req, res) => {
   try {
@@ -77,29 +85,10 @@ app.post("/profile", auth, async (req, res) => {
       photo_url,
     } = req.body;
 
-    // 🔒 ARRAY SAFETY
-    const techSkills = Array.isArray(technical_skills)
-      ? technical_skills
-      : [];
-
-    const softSkills = Array.isArray(soft_skills)
-      ? soft_skills
-      : [];
-
-    // 🔒 JSON SAFETY (THIS FIXES YOUR ERROR)
-    const expJson =
-      experience &&
-      typeof experience === "object" &&
-      !Array.isArray(experience)
-        ? experience
-        : {};
-
-    const eduJson =
-      education &&
-      typeof education === "object" &&
-      !Array.isArray(education)
-        ? education
-        : {};
+    const techSkills = safeArray(technical_skills);
+    const softSkills = safeArray(soft_skills);
+    const experienceJson = safeJson(experience);
+    const educationJson = safeJson(education);
 
     await pool.query(
       `
@@ -116,27 +105,16 @@ app.post("/profile", auth, async (req, res) => {
         photo_url
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      ON CONFLICT (name)
-      DO UPDATE SET
-        current_job_title = EXCLUDED.current_job_title,
-        specialization = EXCLUDED.specialization,
-        profile_summary = EXCLUDED.profile_summary,
-        technical_skills = EXCLUDED.technical_skills,
-        soft_skills = EXCLUDED.soft_skills,
-        experience = EXCLUDED.experience,
-        education = EXCLUDED.education,
-        cv_url = EXCLUDED.cv_url,
-        photo_url = EXCLUDED.photo_url
       `,
       [
-        name,
-        current_job_title,
-        specialization,
-        profile_summary,
+        name || null,
+        current_job_title || null,
+        specialization || null,
+        profile_summary || null,
         techSkills,
         softSkills,
-        expJson,
-        eduJson,
+        experienceJson,
+        educationJson,
         cv_url || null,
         photo_url || null,
       ]
@@ -145,35 +123,27 @@ app.post("/profile", auth, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error("SAVE PROFILE ERROR:", error);
-    res.status(500).json({ message: "Failed to save profile" });
+    res.status(500).json({ message: "Save failed" });
   }
 });
 
 /* ===============================
-   GET PROFILE
+   Load Profile
 ================================ */
 app.get("/profile", auth, async (_req, res) => {
   try {
-    const result = await pool.query(
+    const r = await pool.query(
       "SELECT * FROM candidates ORDER BY id DESC LIMIT 1"
     );
-    res.json(result.rows[0] || {});
+    res.json(r.rows[0] || {});
   } catch (error) {
-    console.error("LOAD PROFILE ERROR:", error);
-    res.status(500).json({ message: "Failed to load profile" });
+    res.status(500).json({ message: "Load failed" });
   }
 });
 
 /* ===============================
-   404
-================================ */
-app.use((_req, res) => {
-  res.status(404).json({ message: "Route not found" });
-});
-
-/* ===============================
-   START SERVER
+   Start Server
 ================================ */
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
+  console.log(`Backend running on port ${PORT}`);
 });

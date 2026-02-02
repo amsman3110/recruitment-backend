@@ -62,13 +62,14 @@ app.get("/candidate/profile", async (req, res) => {
 
     res.json(result.rows[0] || {});
   } catch (err) {
-    console.error(err);
+    console.error("LOAD PROFILE ERROR:", err);
     res.status(500).json({ message: "Failed to load profile" });
   }
 });
 
 /**
  * CREATE or UPDATE candidate profile
+ * ✅ ARRAY-SAFE VERSION
  */
 app.put("/candidate/profile", async (req, res) => {
   const {
@@ -88,6 +89,16 @@ app.put("/candidate/profile", async (req, res) => {
     const existing = await pool.query(
       "SELECT id FROM candidates LIMIT 1"
     );
+
+    const techSkills =
+      Array.isArray(technical_skills) && technical_skills.length > 0
+        ? technical_skills
+        : null;
+
+    const softSkills =
+      Array.isArray(soft_skills) && soft_skills.length > 0
+        ? soft_skills
+        : null;
 
     if (existing.rows.length === 0) {
       // 🆕 INSERT
@@ -116,12 +127,8 @@ app.put("/candidate/profile", async (req, res) => {
           current_job_title,
           specialization,
           profile_summary,
-          Array.isArray(technical_skills)
-            ? technical_skills.join(", ")
-            : "",
-          Array.isArray(soft_skills)
-            ? soft_skills.join(", ")
-            : "",
+          techSkills,
+          softSkills,
           experience,
           education,
           courses,
@@ -152,12 +159,8 @@ app.put("/candidate/profile", async (req, res) => {
           current_job_title,
           specialization,
           profile_summary,
-          Array.isArray(technical_skills)
-            ? technical_skills.join(", ")
-            : "",
-          Array.isArray(soft_skills)
-            ? soft_skills.join(", ")
-            : "",
+          techSkills,
+          softSkills,
           experience,
           education,
           courses,

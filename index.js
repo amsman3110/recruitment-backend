@@ -6,11 +6,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-
-/**
- * Database (BE-027)
- */
-const { initDb } = require("./src/db");
+const { pool, initDb } = require("./src/db");
 
 const app = express();
 
@@ -19,44 +15,13 @@ const app = express();
 ================================ */
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const JWT_SECRET = process.env.JWT_SECRET;
-const CORS_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",")
-  : ["*"];
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 /* ===============================
    Middleware
 ================================ */
-app.use(
-  cors({
-    origin: CORS_ORIGINS,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
+app.use(cors());
 app.use(express.json());
-
-/* ===============================
-   Auth Middleware
-================================ */
-function auth(req, res, next) {
-  const header = req.headers.authorization;
-
-  if (!header) {
-    return res.status(401).json({ message: "No token provided" });
-  }
-
-  const token = header.split(" ")[1];
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
-}
 
 /* ===============================
    Root / Health Check
@@ -70,100 +35,104 @@ app.get("/", (req, res) => {
 });
 
 /* ===============================
-   Auth Routes (Phase 3)
+   AUTH (TEMP)
 ================================ */
-
-/**
- * REGISTER (MB-025)
- */
-app.post("/auth/register", (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({
-      message: "Name, email, and password are required",
-    });
-  }
-
-  // 🔴 TEMP: No DB insert yet (BE-028 will handle this)
-  // BE-027 only ensures the table exists
-
-  return res.status(201).json({
-    success: true,
-    message: "User registered successfully",
-    user: {
-      id: 1,
-      name,
-      email,
-    },
-  });
-});
-
-/**
- * LOGIN
- */
 app.post("/auth/login", (req, res) => {
   const { email } = req.body;
 
-  const token = jwt.sign(
-    {
-      id: 1,
-      email,
-    },
-    JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-    }
-  );
+  const token = jwt.sign({ email }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
 
   res.json({ token });
 });
 
 /* ===============================
-   Jobs Routes
+   CANDIDATE PROFILE
 ================================ */
-app.get("/jobs", (req, res) => {
-  res.json([
-    { id: 1, title: "Software Engineer", location: "Cairo" },
-    { id: 2, title: "Frontend Developer", location: "Remote" },
-    { id: 3, title: "Backend Developer", location: "Alexandria" },
-  ]);
+
+/**
+ * GET candidate profile
+ * Phase 3: returns the first candidate
+ */
+app.get("/candidate/profile", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM candidates LIMIT 1"
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({});
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to load profile" });
+  }
 });
 
 /**
- * Apply to Job (Protected)
+ * UPDATE candidate profile
  */
-app.post("/jobs/:id/apply", auth, (req, res) => {
-  const jobId = req.params.id;
+app.put("/candidate/profile", async (req, res) => {
+  const {
+    name,
+    current_job_title,
+    specialization,
+    profile_summary,
+    technical_skills,
+    soft_skills,
+    experience,
+    education,
+    courses,
+    certificates,
+  } = req.body;
 
-  res.json({
-    success: true,
-    message: `Application submitted successfully for job ${jobId}`,
-    user: req.user,
-  });
+  try {
+    await pool.query(
+      `
+      UPDATE candidates
+      SET
+        name = $1,
+        current_job_title = $2,
+        specialization = $3,
+        profile_summary = $4,
+        technical_skills = $5,
+        soft_skills = $6,
+        experience = $7,
+        education = $8,
+        courses = $9,
+        certificates = $10,
+        updated_at = NOW()
+      WHERE id = (SELECT id FROM candidates LIMIT 1)
+      `,
+      [
+        name,
+        current_job_title,
+        specialization,
+        profile_summary,
+        technical_skills,
+        soft_skills,
+        experience,
+        education,
+        courses,
+        certificates,
+      ]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
 });
 
 /* ===============================
-   404 Handler
+   START SERVER
 ================================ */
-app.use((req, res) => {
-  res.status(404).json({
-    message: "Route not found",
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
   });
 });
-
-/* ===============================
-   Start Server (BE-027)
-================================ */
-initDb()
-  .then(() => {
-    console.log("Database initialized");
-
-    app.listen(PORT, () => {
-      console.log(`Backend running on port ${PORT} (${NODE_ENV})`);
-    });
-  })
-  .catch((err) => {
-    console.error("Database initialization failed", err);
-    process.exit(1);
-  });

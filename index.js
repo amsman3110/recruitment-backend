@@ -68,8 +68,7 @@ app.get("/candidate/profile", async (req, res) => {
 });
 
 /**
- * UPDATE candidate profile
- * Phase 3: store arrays as TEXT
+ * CREATE or UPDATE candidate profile
  */
 app.put("/candidate/profile", async (req, res) => {
   const {
@@ -86,45 +85,92 @@ app.put("/candidate/profile", async (req, res) => {
   } = req.body;
 
   try {
-    await pool.query(
-      `
-      UPDATE candidates
-      SET
-        name = $1,
-        current_job_title = $2,
-        specialization = $3,
-        profile_summary = $4,
-        technical_skills = $5,
-        soft_skills = $6,
-        experience = $7,
-        education = $8,
-        courses = $9,
-        certificates = $10,
-        updated_at = NOW()
-      WHERE id = (SELECT id FROM candidates LIMIT 1)
-      `,
-      [
-        name,
-        current_job_title,
-        specialization,
-        profile_summary,
-        Array.isArray(technical_skills)
-          ? technical_skills.join(", ")
-          : "",
-        Array.isArray(soft_skills)
-          ? soft_skills.join(", ")
-          : "",
-        experience,
-        education,
-        courses,
-        certificates,
-      ]
+    const existing = await pool.query(
+      "SELECT id FROM candidates LIMIT 1"
     );
+
+    if (existing.rows.length === 0) {
+      // 🆕 INSERT
+      await pool.query(
+        `
+        INSERT INTO candidates
+        (
+          name,
+          current_job_title,
+          specialization,
+          profile_summary,
+          technical_skills,
+          soft_skills,
+          experience,
+          education,
+          courses,
+          certificates,
+          created_at,
+          updated_at
+        )
+        VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+        `,
+        [
+          name,
+          current_job_title,
+          specialization,
+          profile_summary,
+          Array.isArray(technical_skills)
+            ? technical_skills.join(", ")
+            : "",
+          Array.isArray(soft_skills)
+            ? soft_skills.join(", ")
+            : "",
+          experience,
+          education,
+          courses,
+          certificates,
+        ]
+      );
+    } else {
+      // ✏️ UPDATE
+      await pool.query(
+        `
+        UPDATE candidates
+        SET
+          name = $1,
+          current_job_title = $2,
+          specialization = $3,
+          profile_summary = $4,
+          technical_skills = $5,
+          soft_skills = $6,
+          experience = $7,
+          education = $8,
+          courses = $9,
+          certificates = $10,
+          updated_at = NOW()
+        WHERE id = $11
+        `,
+        [
+          name,
+          current_job_title,
+          specialization,
+          profile_summary,
+          Array.isArray(technical_skills)
+            ? technical_skills.join(", ")
+            : "",
+          Array.isArray(soft_skills)
+            ? soft_skills.join(", ")
+            : "",
+          experience,
+          education,
+          courses,
+          certificates,
+          existing.rows[0].id,
+        ]
+      );
+    }
 
     res.json({ success: true });
   } catch (err) {
-    console.error("UPDATE PROFILE ERROR:", err);
-    res.status(500).json({ message: "Failed to update profile" });
+    console.error("SAVE PROFILE ERROR:", err);
+    res.status(500).json({ message: "Failed to save profile" });
   }
 });
 

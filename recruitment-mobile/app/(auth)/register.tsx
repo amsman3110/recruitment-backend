@@ -1,24 +1,15 @@
-import { useRouter } from "expo-router";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-const DEV_LOGIN_BYPASS = true; // 👈 DEV ONLY
-
-export default function LoginScreen() {
-  const router = useRouter();
-
-  function handleLogin() {
-    if (DEV_LOGIN_BYPASS) {
-      // ✅ Go to the REAL home: app/(tabs)/index.tsx
-      router.replace("/(tabs)");
-      return;
-    }
-
-    // Real login will be implemented later
-  }
-
+export default function RegisterScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
+      <Text style={styles.title}>Create Account</Text>
+
+      <TextInput
+        placeholder="Full Name"
+        style={styles.input}
+        autoCapitalize="words"
+      />
 
       <TextInput
         placeholder="Email Address"
@@ -33,13 +24,15 @@ export default function LoginScreen() {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
+      <TextInput
+        placeholder="Confirm Password"
+        style={styles.input}
+        secureTextEntry
+      />
 
-      <Text style={styles.devHint}>
-        DEV MODE: Login works without credentials
-      </Text>
+      <TouchableOpacity style={styles.button}>
+        <Text style={styles.buttonText}>Register</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -76,11 +69,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
-  },
-  devHint: {
-    marginTop: 16,
-    textAlign: "center",
-    fontSize: 12,
-    color: "#888888",
   },
 });

@@ -3,11 +3,19 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { getToken } from "./services/tokenStorage";
 
+const DEV_MODE = true; // 👈 turn OFF when real auth is ready
+
 export default function StartupScreen() {
   const router = useRouter();
 
   useEffect(() => {
     async function checkAuth() {
+      if (DEV_MODE) {
+        // 🚧 DEV: always start at login
+        router.replace("/(auth)/login");
+        return;
+      }
+
       const token = await getToken();
 
       if (token) {

@@ -1,45 +1,38 @@
-import { Tabs, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { getToken } from "../services/tokenStorage";
+import { Link, Tabs } from "expo-router";
+import { Text, TouchableOpacity } from "react-native";
+import { removeToken } from "../services/tokenStorage";
 
 export default function TabsLayout() {
-  const router = useRouter();
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  /**
+   * Tabs layout must stay declarative.
+   * Token removal is allowed, navigation is declarative via <Link>.
+   */
 
-  useEffect(() => {
-    async function checkAuth() {
-      const token = await getToken();
-
-      if (!token) {
-        router.replace("/(auth)/login");
-      } else {
-        setCheckingAuth(false);
-      }
-    }
-
-    checkAuth();
-  }, []);
-
-  if (checkingAuth) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "white",
-        }}
-      >
-        <ActivityIndicator size="large" />
-      </View>
-    );
+  async function handleLogout() {
+    console.log("Logout pressed → removing token");
+    await removeToken();
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="jobs" />
+    <Tabs
+      screenOptions={{
+        headerRight: () => (
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={{ marginRight: 16 }}
+            >
+              <Text style={{ color: "red", fontWeight: "600" }}>
+                Logout
+              </Text>
+            </TouchableOpacity>
+          </Link>
+        ),
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="jobs" options={{ title: "Jobs" }} />
+      <Tabs.Screen name="explore" options={{ title: "Explore" }} />
     </Tabs>
   );
 }

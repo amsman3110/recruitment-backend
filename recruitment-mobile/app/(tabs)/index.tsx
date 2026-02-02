@@ -1,65 +1,56 @@
 import { useRouter } from "expo-router";
-import { Pressable, Text, View } from "react-native";
-import { removeToken } from "../services/tokenStorage";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function HomeScreen() {
   const router = useRouter();
 
-  async function handleLogout() {
-    await removeToken();
+  function handleLogout() {
+    // 🚧 DEV LOGOUT: go back to login screen
     router.replace("/(auth)/login");
   }
 
   return (
-    <View
-      style={{
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingBottom: 30,
-        backgroundColor: "white",
-      }}
-    >
-      <View style={{ marginTop: 80 }}>
-        <Text
-          style={{
-            fontSize: 26,
-            fontWeight: "700",
-            marginBottom: 24,
-          }}
-        >
-          Home
-        </Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Home</Text>
 
-        <Text
-          style={{
-            fontSize: 16,
-            color: "#555",
-            marginBottom: 30,
-          }}
-        >
-          Welcome to the Recruitment App
-        </Text>
+      <Text style={styles.subtitle}>
+        You are logged in (DEV MODE)
+      </Text>
 
-        <Pressable
-          onPress={handleLogout}
-          style={{
-            backgroundColor: "#000",
-            padding: 16,
-            borderRadius: 12,
-          }}
-        >
-          <Text
-            style={{
-              color: "white",
-              textAlign: "center",
-              fontSize: 16,
-              fontWeight: "600",
-            }}
-          >
-            Logout
-          </Text>
-        </Pressable>
-      </View>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666666",
+    marginBottom: 40,
+  },
+  logoutButton: {
+    backgroundColor: "#ff3b30",
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+  },
+  logoutText: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+});

@@ -15,76 +15,128 @@ import {
 } from "react-native";
 import { apiGet, apiPost } from "../services/api";
 
-const BACKEND_URL = "https://recruitment-backend-cm12.onrender.com";
+const BACKEND_URL =
+  "https://recruitment-backend-production-6075.up.railway.app";
 
 export default function EditProfileScreen() {
   const router = useRouter();
 
-  const [name, setName] = useState("");
-  const [currentJobTitle, setCurrentJobTitle] = useState("");
-  const [specialization, setSpecialization] = useState("");
-  const [profileSummary, setProfileSummary] = useState("");
+  const nameState = useState("");
+  const jobTitleState = useState("");
+  const specializationState = useState("");
+  const summaryState = useState("");
 
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [cvUrl, setCvUrl] = useState<string | null>(null);
-  const [cvName, setCvName] = useState<string | null>(null);
+  const photoState = useState(null);
+  const cvUrlState = useState(null);
+  const cvNameState = useState(null);
+  const loadingState = useState(false);
 
-  const [loading, setLoading] = useState(false);
+  const name = nameState[0];
+  const setName = nameState[1];
 
-  useEffect(() => {
+  const currentJobTitle = jobTitleState[0];
+  const setCurrentJobTitle = jobTitleState[1];
+
+  const specialization = specializationState[0];
+  const setSpecialization = specializationState[1];
+
+  const profileSummary = summaryState[0];
+  const setProfileSummary = summaryState[1];
+
+  const photoUrl = photoState[0];
+  const setPhotoUrl = photoState[1];
+
+  const cvUrl = cvUrlState[0];
+  const setCvUrl = cvUrlState[1];
+
+  const cvName = cvNameState[0];
+  const setCvName = cvNameState[1];
+
+  const loading = loadingState[0];
+  const setLoading = loadingState[1];
+
+  useEffect(function () {
     loadProfile();
   }, []);
 
   async function loadProfile() {
     try {
-      const profile = await apiGet("/profile");
+      const profile = await apiGet("/candidates/me");
+
       setName(profile?.name || "");
       setCurrentJobTitle(profile?.current_job_title || "");
       setSpecialization(profile?.specialization || "");
       setProfileSummary(profile?.profile_summary || "");
-      setPhotoUrl(profile?.photo_url || null);
-      setCvUrl(profile?.cv_url || null);
+
+      if (profile?.photo_base64) {
+        setPhotoUrl("data:image/jpeg;base64," + profile.photo_base64);
+      }
+
+      if (profile?.cv_base64) {
+        setCvUrl("data:application/pdf;base64," + profile.cv_base64);
+      }
     } catch {}
   }
 
-  async function handlePickPhoto() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-
-    if (result.canceled) return;
-
+  async function uploadFile(kind, uri, filename, mimeType) {
     const token = await AsyncStorage.getItem("token");
     if (!token) {
       Alert.alert("Error", "Not authenticated");
       return;
     }
 
-    const image = result.assets[0];
     const formData = new FormData();
-
-    formData.append("photo", {
-      uri: image.uri,
-      name: "photo.jpg",
-      type: "image/jpeg",
-    } as any);
+    formData.append(kind, {
+      uri: uri,
+      name: filename,
+      type: mimeType,
+    });
 
     try {
       setLoading(true);
-      const res = await fetch(`${BACKEND_URL}/upload/photo`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
 
-      const data = await res.json();
-      setPhotoUrl(data.photo_url);
+      const response = await fetch(
+        BACKEND_URL + "/candidates/upload/" + kind,
+        {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token },
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Error", data?.error || "Upload failed");
+        return;
+      }
+
+      if (kind === "photo") {
+        setPhotoUrl(data.photo_url);
+      } else {
+        setCvUrl(data.cv_url);
+        setCvName(filename);
+      }
     } catch {
-      Alert.alert("Error", "Photo upload failed");
+      Alert.alert("Error", "Upload failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handlePickPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+
+    if (result.canceled) return;
+
+    uploadFile(
+      "photo",
+      result.assets[0].uri,
+      "photo.jpg",
+      "image/jpeg"
+    );
   }
 
   async function handlePickCV() {
@@ -94,44 +146,20 @@ export default function EditProfileScreen() {
 
     if (result.canceled) return;
 
-    const token = await AsyncStorage.getItem("token");
-    if (!token) {
-      Alert.alert("Error", "Not authenticated");
-      return;
-    }
-
-    const file = result.assets[0];
-    setCvName(file.name);
-
-    const formData = new FormData();
-    formData.append("cv", {
-      uri: file.uri,
-      name: file.name,
-      type: "application/pdf",
-    } as any);
-
-    try {
-      setLoading(true);
-      const res = await fetch(`${BACKEND_URL}/upload/cv`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data = await res.json();
-      setCvUrl(data.cv_url);
-    } catch {
-      Alert.alert("Error", "CV upload failed");
-    } finally {
-      setLoading(false);
-    }
+    setCvName(result.assets[0].name);
+    uploadFile(
+      "cv",
+      result.assets[0].uri,
+      result.assets[0].name,
+      "application/pdf"
+    );
   }
 
   async function handleSave() {
     try {
       setLoading(true);
 
-      await apiPost("/profile", {
+      await apiPost("/candidates/me", {
         name,
         current_job_title: currentJobTitle,
         specialization,
@@ -158,11 +186,11 @@ export default function EditProfileScreen() {
           style={styles.avatar}
           source={
             photoUrl
-              ? { uri: `${BACKEND_URL}${photoUrl}` }
+              ? { uri: photoUrl }
               : require("../../assets/images/avatar-placeholder.png")
           }
         />
-        <Text style={styles.link}>Change Photo</Text>
+        <Text style={styles.link}>Upload Photo</Text>
       </TouchableOpacity>
 
       <Input label="Name" value={name} onChange={setName} />
@@ -185,7 +213,7 @@ export default function EditProfileScreen() {
 
       <TouchableOpacity style={styles.uploadBtn} onPress={handlePickCV}>
         <Text style={styles.uploadText}>
-          {cvName ? `CV: ${cvName}` : "Upload CV (PDF)"}
+          {cvName ? "CV: " + cvName : "Upload CV (PDF)"}
         </Text>
       </TouchableOpacity>
 
@@ -202,25 +230,18 @@ export default function EditProfileScreen() {
   );
 }
 
-function Input({
-  label,
-  value,
-  onChange,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  multiline?: boolean;
-}) {
+function Input(props) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>{props.label}</Text>
       <TextInput
-        value={value}
-        onChangeText={onChange}
-        style={[styles.input, multiline ? styles.multiline : null]}
-        multiline={multiline}
+        value={props.value}
+        onChangeText={props.onChange}
+        style={[
+          styles.input,
+          props.multiline ? styles.multiline : null,
+        ]}
+        multiline={props.multiline}
       />
     </View>
   );

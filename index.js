@@ -20,7 +20,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   ENSURE UPLOAD DIRECTORIES (RENDER SAFE)
+   ENSURE UPLOAD DIRECTORIES
 ================================ */
 const uploadDirs = [
   "uploads",
@@ -92,10 +92,10 @@ app.post("/auth/login", (_req, res) => {
 });
 
 /* ===============================
-   UPLOAD PHOTO
+   CANDIDATES: UPLOAD PHOTO
 ================================ */
 app.post(
-  "/upload/photo",
+  "/candidates/upload/photo",
   auth,
   uploadPhoto.single("photo"),
   (req, res) => {
@@ -103,16 +103,16 @@ app.post(
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const photoUrl = `/uploads/photos/${req.file.filename}`;
+    const photoUrl = "/uploads/photos/" + req.file.filename;
     res.json({ photo_url: photoUrl });
   }
 );
 
 /* ===============================
-   UPLOAD CV
+   CANDIDATES: UPLOAD CV
 ================================ */
 app.post(
-  "/upload/cv",
+  "/candidates/upload/cv",
   auth,
   uploadCV.single("cv"),
   (req, res) => {
@@ -120,20 +120,16 @@ app.post(
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const cvUrl = `/uploads/cv/${req.file.filename}`;
+    const cvUrl = "/uploads/cv/" + req.file.filename;
     res.json({ cv_url: cvUrl });
   }
 );
 
 /* ===============================
-   LOAD PROFILE
+   CANDIDATES: LOAD PROFILE
 ================================ */
-app.get("/profile", auth, async (_req, res) => {
+app.get("/candidates/me", auth, async (_req, res) => {
   try {
-    if (!pool) {
-      throw new Error("Database pool not initialized");
-    }
-
     const r = await pool.query(
       "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
     );
@@ -146,14 +142,10 @@ app.get("/profile", auth, async (_req, res) => {
 });
 
 /* ===============================
-   SAVE PROFILE
+   CANDIDATES: SAVE PROFILE
 ================================ */
-app.post("/profile", auth, async (req, res) => {
+app.post("/candidates/me", auth, async (req, res) => {
   try {
-    if (!pool) {
-      throw new Error("Database pool not initialized");
-    }
-
     const {
       name,
       current_job_title,
@@ -195,7 +187,6 @@ app.post("/profile", auth, async (req, res) => {
     res.status(500).json({ message: "Save failed" });
   }
 });
-
 
 /* ===============================
    START SERVER

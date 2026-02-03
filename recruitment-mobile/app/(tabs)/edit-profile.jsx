@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -21,286 +20,329 @@ const BACKEND_URL =
 export default function EditProfileScreen() {
   const router = useRouter();
 
-  const nameState = useState("");
-  const jobTitleState = useState("");
-  const specializationState = useState("");
-  const summaryState = useState("");
+  // States for the form fields
+  const [name, setName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [specialization, setSpecialization] = useState("");
+  const [summary, setSummary] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const [cvUrl, setCvUrl] = useState(null);
+  const [cvName, setCvName] = useState(null);
+  const [technicalSkills, setTechnicalSkills] = useState([]);
+  const [softSkills, setSoftSkills] = useState([]);
+  const [experience, setExperience] = useState("");
+  const [education, setEducation] = useState("");
+  const [courses, setCourses] = useState("");
+  const [certificates, setCertificates] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const photoState = useState(null);
-  const cvUrlState = useState(null);
-  const cvNameState = useState(null);
-  const loadingState = useState(false);
-
-  const name = nameState[0];
-  const setName = nameState[1];
-
-  const currentJobTitle = jobTitleState[0];
-  const setCurrentJobTitle = jobTitleState[1];
-
-  const specialization = specializationState[0];
-  const setSpecialization = specializationState[1];
-
-  const profileSummary = summaryState[0];
-  const setProfileSummary = summaryState[1];
-
-  const photoUrl = photoState[0];
-  const setPhotoUrl = photoState[1];
-
-  const cvUrl = cvUrlState[0];
-  const setCvUrl = cvUrlState[1];
-
-  const cvName = cvNameState[0];
-  const setCvName = cvNameState[1];
-
-  const loading = loadingState[0];
-  const setLoading = loadingState[1];
-
-  useEffect(function () {
+  // Fetch profile data to pre-fill form
+  useEffect(() => {
+    const loadProfile = async () => {
+      setLoading(true);
+      try {
+        const response = await apiGet("/candidate/profile");
+        const profile = response || {};
+        setName(profile.name || "");
+        setJobTitle(profile.current_job_title || "");
+        setSpecialization(profile.specialization || "");
+        setSummary(profile.profile_summary || "");
+        setPhoto(profile.photo_url || null);
+        setCvUrl(profile.cv_url || null);
+        setCvName(profile.cv_name || null);
+        setTechnicalSkills(profile.technical_skills || []);
+        setSoftSkills(profile.soft_skills || []);
+        setExperience(profile.experience || "");
+        setEducation(profile.education || "");
+        setCourses(profile.courses || "");
+        setCertificates(profile.certificates || "");
+      } catch (error) {
+        console.log("Error loading profile:", error);
+        Alert.alert("Error", "Could not load profile data.");
+      } finally {
+        setLoading(false);
+      }
+    };
     loadProfile();
   }, []);
 
-  async function loadProfile() {
-    try {
-      const profile = await apiGet("/candidates/me");
-
-      setName(profile?.name || "");
-      setCurrentJobTitle(profile?.current_job_title || "");
-      setSpecialization(profile?.specialization || "");
-      setProfileSummary(profile?.profile_summary || "");
-
-      if (profile?.photo_base64) {
-        setPhotoUrl("data:image/jpeg;base64," + profile.photo_base64);
-      }
-
-      if (profile?.cv_base64) {
-        setCvUrl("data:application/pdf;base64," + profile.cv_base64);
-      }
-    } catch {}
-  }
-
-  async function uploadFile(kind, uri, filename, mimeType) {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) {
-      Alert.alert("Error", "Not authenticated");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append(kind, {
-      uri: uri,
-      name: filename,
-      type: mimeType,
-    });
-
-    try {
-      setLoading(true);
-
-      const response = await fetch(
-        BACKEND_URL + "/candidates/upload/" + kind,
-        {
-          method: "POST",
-          headers: { Authorization: "Bearer " + token },
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert("Error", data?.error || "Upload failed");
-        return;
-      }
-
-      if (kind === "photo") {
-        setPhotoUrl(data.photo_url);
-      } else {
-        setCvUrl(data.cv_url);
-        setCvName(filename);
-      }
-    } catch {
-      Alert.alert("Error", "Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handlePickPhoto() {
-    const result = await ImagePicker.launchImageLibraryAsync({
+  // Handle photo upload
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
     });
 
-    if (result.canceled) return;
+    if (!result.cancelled) {
+      setPhoto(result.uri);
+    }
+  };
 
-    uploadFile(
-      "photo",
-      result.assets[0].uri,
-      "photo.jpg",
-      "image/jpeg"
-    );
-  }
-
-  async function handlePickCV() {
-    const result = await DocumentPicker.getDocumentAsync({
+  // Handle CV upload
+  const pickCV = async () => {
+    let result = await DocumentPicker.getDocumentAsync({
       type: "application/pdf",
     });
 
-    if (result.canceled) return;
+    if (result.type === "success") {
+      setCvUrl(result.uri);
+      setCvName(result.name);
+    }
+  };
 
-    setCvName(result.assets[0].name);
-    uploadFile(
-      "cv",
-      result.assets[0].uri,
-      result.assets[0].name,
-      "application/pdf"
-    );
-  }
+  // Handle form submission
+  const handleSave = async () => {
+    setLoading(true);
+    
+    const formData = new FormData();
 
-  async function handleSave() {
+    // Add text fields
+    formData.append("name", name);
+    formData.append("jobTitle", jobTitle);
+    formData.append("specialization", specialization);
+    formData.append("summary", summary);
+
+    // Add photo if exists
+    if (photo) {
+      const photoData = {
+        uri: photo,
+        type: "image/jpeg", // Adjust according to your image type
+        name: "profile_photo.jpg",
+      };
+      formData.append("photo", photoData);
+    }
+
+    // Add CV if exists
+    if (cvUrl) {
+      const cvData = {
+        uri: cvUrl,
+        type: "application/pdf", // Assuming PDF type for the CV
+        name: cvName || "cv_file.pdf",
+      };
+      formData.append("cv", cvData);
+    }
+
     try {
-      setLoading(true);
-
-      await apiPost("/candidates/me", {
-        name,
-        current_job_title: currentJobTitle,
-        specialization,
-        profile_summary: profileSummary,
-        photo_url: photoUrl,
-        cv_url: cvUrl,
-      });
-
-      Alert.alert("Success", "Profile saved");
-      router.back();
-    } catch {
-      Alert.alert("Error", "Failed to save profile");
+      await apiPost("/candidate/update-profile", formData);
+      Alert.alert("Success", "Profile updated successfully");
+      router.push("/profile");
+    } catch (error) {
+      console.log("Error updating profile:", error);
+      Alert.alert("Error", "Could not update profile.");
     } finally {
       setLoading(false);
     }
+  };
+
+  if (loading) {
+    return <Text>Loading profile...</Text>;
   }
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Edit Profile</Text>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <TouchableOpacity onPress={() => router.push("/profile")}>
+          <Text style={styles.cancelButton}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity onPress={handlePickPhoto}>
+      {/* Photo */}
+      <View style={styles.photoContainer}>
         <Image
-          style={styles.avatar}
-          source={
-            photoUrl
-              ? { uri: photoUrl }
-              : require("../../assets/images/avatar-placeholder.png")
-          }
+          source={{
+            uri: photo || "https://via.placeholder.com/120",
+          }}
+          style={styles.photo}
         />
-        <Text style={styles.link}>Upload Photo</Text>
-      </TouchableOpacity>
+        <TouchableOpacity onPress={pickImage}>
+          <Text style={styles.changePhotoText}>Change Photo</Text>
+        </TouchableOpacity>
+      </View>
 
-      <Input label="Name" value={name} onChange={setName} />
-      <Input
-        label="Current Job Title"
-        value={currentJobTitle}
-        onChange={setCurrentJobTitle}
+      {/* Name */}
+      <Text style={styles.label}>Name</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Name"
+        value={name}
+        onChangeText={setName}
       />
-      <Input
-        label="Specialization"
+
+      {/* Job Title */}
+      <Text style={styles.label}>Job Title</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Job Title"
+        value={jobTitle}
+        onChangeText={setJobTitle}
+      />
+
+      {/* Specialization */}
+      <Text style={styles.label}>Specialization</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Specialization"
         value={specialization}
-        onChange={setSpecialization}
-      />
-      <Input
-        label="Profile Summary"
-        value={profileSummary}
-        onChange={setProfileSummary}
-        multiline
+        onChangeText={setSpecialization}
       />
 
-      <TouchableOpacity style={styles.uploadBtn} onPress={handlePickCV}>
-        <Text style={styles.uploadText}>
-          {cvName ? "CV: " + cvName : "Upload CV (PDF)"}
-        </Text>
-      </TouchableOpacity>
+      {/* Profile Summary */}
+      <Text style={styles.label}>Profile Summary</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Profile Summary"
+        value={summary}
+        onChangeText={setSummary}
+      />
 
-      <TouchableOpacity
-        style={styles.saveBtn}
-        onPress={handleSave}
-        disabled={loading}
-      >
-        <Text style={styles.saveText}>
-          {loading ? "Saving..." : "Save Profile"}
-        </Text>
+      {/* CV */}
+      <Text style={styles.label}>CV</Text>
+      <View style={styles.cvContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="CV URL"
+          value={cvUrl}
+          onChangeText={setCvUrl}
+        />
+        <TouchableOpacity onPress={pickCV}>
+          <Text style={styles.changeCVText}>Change CV</Text>
+        </TouchableOpacity>
+        {cvName && <Text style={styles.cvNameText}>{cvName}</Text>}
+      </View>
+
+      {/* Technical Skills */}
+      <Text style={styles.label}>Technical Skills</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Technical Skills"
+        value={technicalSkills.join(", ")}
+        onChangeText={(text) => setTechnicalSkills(text.split(", "))}
+      />
+
+      {/* Soft Skills */}
+      <Text style={styles.label}>Soft Skills</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Soft Skills"
+        value={softSkills.join(", ")}
+        onChangeText={(text) => setSoftSkills(text.split(", "))}
+      />
+
+      {/* Experience */}
+      <Text style={styles.label}>Experience</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Experience"
+        value={experience}
+        onChangeText={setExperience}
+      />
+
+      {/* Education */}
+      <Text style={styles.label}>Education</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Education"
+        value={education}
+        onChangeText={setEducation}
+      />
+
+      {/* Courses */}
+      <Text style={styles.label}>Courses</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Courses"
+        value={courses}
+        onChangeText={setCourses}
+      />
+
+      {/* Certificates */}
+      <Text style={styles.label}>Certificates</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Certificates"
+        value={certificates}
+        onChangeText={setCertificates}
+      />
+
+      {/* Save Button */}
+      <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
+        <Text style={styles.saveButtonText}>Save Changes</Text>
       </TouchableOpacity>
     </ScrollView>
-  );
-}
-
-function Input(props) {
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={styles.label}>{props.label}</Text>
-      <TextInput
-        value={props.value}
-        onChangeText={props.onChange}
-        style={[
-          styles.input,
-          props.multiline ? styles.multiline : null,
-        ]}
-        multiline={props.multiline}
-      />
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    backgroundColor: "#121212",
     padding: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 20,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  avatar: {
+  headerTitle: {
+    color: "#ffffff",
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  cancelButton: {
+    color: "#007AFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  label: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 5,
+  },
+  input: {
+    height: 40,
+    borderColor: "gray",
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingLeft: 8,
+    color: "#ffffff",
+  },
+  photoContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  photo: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    alignSelf: "center",
-    marginBottom: 8,
   },
-  link: {
-    color: "#60a5fa",
-    textAlign: "center",
-    marginBottom: 24,
+  changePhotoText: {
+    color: "#007BFF",
+    fontWeight: "bold",
   },
-  label: {
-    color: "#cbd5f5",
-    marginBottom: 6,
+  cvContainer: {
+    marginBottom: 20,
   },
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
+  changeCVText: {
+    color: "#007BFF",
+    fontWeight: "bold",
   },
-  multiline: {
-    height: 100,
+  cvNameText: {
+    color: "#dddddd",
+    marginTop: 5,
   },
-  uploadBtn: {
-    backgroundColor: "#1e293b",
-    padding: 14,
-    borderRadius: 8,
-    marginBottom: 24,
+  saveButton: {
+    backgroundColor: "#007BFF",
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 20,
   },
-  uploadText: {
+  saveButtonText: {
     color: "#fff",
     textAlign: "center",
-  },
-  saveBtn: {
-    backgroundColor: "#2563eb",
-    padding: 16,
-    borderRadius: 10,
-  },
-  saveText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "600",
+    fontWeight: "bold",
   },
 });

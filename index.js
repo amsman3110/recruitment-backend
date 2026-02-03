@@ -130,12 +130,17 @@ app.post(
 ================================ */
 app.get("/profile", auth, async (_req, res) => {
   try {
+    if (!pool) {
+      throw new Error("Database pool not initialized");
+    }
+
     const r = await pool.query(
       "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
     );
+
     res.json(r.rows[0] || {});
   } catch (e) {
-    console.error("LOAD PROFILE ERROR:", e);
+    console.error("LOAD PROFILE ERROR:", e.message);
     res.status(500).json({ message: "Load failed" });
   }
 });
@@ -145,6 +150,10 @@ app.get("/profile", auth, async (_req, res) => {
 ================================ */
 app.post("/profile", auth, async (req, res) => {
   try {
+    if (!pool) {
+      throw new Error("Database pool not initialized");
+    }
+
     const {
       name,
       current_job_title,
@@ -158,16 +167,20 @@ app.post("/profile", auth, async (req, res) => {
       `
       INSERT INTO candidates (
         name,
+        email,
+        password_hash,
         current_job_title,
         specialization,
         profile_summary,
         photo_url,
         cv_url
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       `,
       [
         name,
+        "dev@example.com",
+        "dev_password_hash",
         current_job_title,
         specialization,
         profile_summary,
@@ -178,10 +191,11 @@ app.post("/profile", auth, async (req, res) => {
 
     res.json({ success: true });
   } catch (e) {
-    console.error("SAVE PROFILE ERROR:", e);
+    console.error("SAVE PROFILE ERROR:", e.message);
     res.status(500).json({ message: "Save failed" });
   }
 });
+
 
 /* ===============================
    START SERVER

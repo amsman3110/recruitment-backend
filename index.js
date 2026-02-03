@@ -1,10 +1,9 @@
-// v2 routes
+// v3 - Base64 uploads
 require("dotenv").config();
 
 var express = require("express");
 var cors = require("cors");
 var jwt = require("jsonwebtoken");
-var multer = require("multer");
 var bcrypt = require("bcrypt");
 var Pool = require("pg").Pool;
 
@@ -37,14 +36,6 @@ function auth(req, res, next) {
 }
 
 /* ===============================
-   MULTER (MEMORY STORAGE)
-================================ */
-var upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
-
-/* ===============================
    HEALTH CHECK
 ================================ */
 app.get("/", function (req, res) {
@@ -52,9 +43,7 @@ app.get("/", function (req, res) {
 });
 
 /* ===============================
-   MIGRATION ROUTE (MANUAL TRIGGER)
-   Open in browser to verify database:
-   https://your-url/run-migration
+   MIGRATION ROUTE
 ================================ */
 app.get("/run-migration", async function (req, res) {
   try {
@@ -82,8 +71,6 @@ app.get("/run-migration", async function (req, res) {
 /* ===============================
    AUTH ROUTES
 ================================ */
-
-// POST /auth/register - Register new user with email + password
 app.post("/auth/register", async function (req, res) {
   try {
     var email = req.body.email;
@@ -95,7 +82,6 @@ app.post("/auth/register", async function (req, res) {
     }
 
     var hashedPassword = await bcrypt.hash(password, 10);
-
     var result = await pool.query(
       "INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, 'candidate') RETURNING id, email, role, name",
       [email, hashedPassword, name || null]
@@ -103,7 +89,6 @@ app.post("/auth/register", async function (req, res) {
 
     res.status(201).json(result.rows[0]);
   } catch (e) {
-    // 23505 = unique violation (email already exists)
     if (e.code === "23505") {
       return res.status(400).json({ error: "Email already exists" });
     }
@@ -111,14 +96,12 @@ app.post("/auth/register", async function (req, res) {
   }
 });
 
-// POST /auth/login - Login with email + password
-// Also keeps DEV LOGIN working (if no email/password sent, auto-creates dev user)
 app.post("/auth/login", async function (req, res) {
   try {
     var email = req.body.email;
     var password = req.body.password;
 
-    // DEV MODE: if no email/password, auto-create dev user
+    // DEV MODE
     if (!email && !password) {
       var devResult = await pool.query(
         "INSERT INTO users (email, role) VALUES ('dev@example.com', 'candidate') ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id"
@@ -127,7 +110,6 @@ app.post("/auth/login", async function (req, res) {
       return res.json({ token: devToken });
     }
 
-    // REAL LOGIN: find user by email
     var result = await pool.query(
       "SELECT id, email, password, role FROM users WHERE email = $1",
       [email]
@@ -138,14 +120,11 @@ app.post("/auth/login", async function (req, res) {
     }
 
     var user = result.rows[0];
-
-    // Compare password
     var passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // Create token with userId and role
     var token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
 
     res.json({
@@ -162,12 +141,8 @@ app.post("/auth/login", async function (req, res) {
 });
 
 /* ===============================
-   CANDIDATE PROFILE ROUTES
-   Frontend calls /candidate/profile (GET and POST)
-   We keep /candidates/me as well for compatibility
+   PROFILE ROUTES
 ================================ */
-
-// GET /candidate/profile - Load profile (used by frontend)
 app.get("/candidate/profile", auth, async function (req, res) {
   try {
     var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
@@ -177,7 +152,6 @@ app.get("/candidate/profile", auth, async function (req, res) {
   }
 });
 
-// POST /candidate/update-profile - Save profile (used by frontend)
 app.post("/candidate/update-profile", auth, async function (req, res) {
   try {
     var b = req.body;
@@ -205,7 +179,6 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
   }
 });
 
-// GET /candidates/me - Load profile (backup route)
 app.get("/candidates/me", auth, async function (req, res) {
   try {
     var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
@@ -215,7 +188,6 @@ app.get("/candidates/me", auth, async function (req, res) {
   }
 });
 
-// POST /candidates/me - Save profile (backup route)
 app.post("/candidates/me", auth, async function (req, res) {
   try {
     var b = req.body;
@@ -230,30 +202,44 @@ app.post("/candidates/me", auth, async function (req, res) {
 });
 
 /* ===============================
-   FILE UPLOAD ROUTES
+   FILE UPLOAD ROUTES - BASE64
 ================================ */
-
-// POST /candidates/upload/photo
-app.post("/candidates/upload/photo", auth, upload.single("photo"), async function (req, res) {
+app.post("/candidates/upload/photo", auth, async function (req, res) {
   try {
-    if (!req.file) return res.status(400).json({ error: "Photo required" });
-    var b = req.file.buffer.toString("base64");
-    var d = "data:" + req.file.mimetype + ";base64," + b;
-    await pool.query("UPDATE users SET photo_url = $1 WHERE id = $2", [d, req.user.userId]);
-    res.json({ photo_url: d });
+    var base64Data = req.body.photo_base64;
+    
+    if (!base64Data) {
+      return res.status(400).json({ error: "photo_base64 is required" });
+    }
+
+    // If it doesn't have data URI prefix, add it
+    var dataUrl = base64Data;
+    if (!base64Data.startsWith("data:")) {
+      dataUrl = "data:image/jpeg;base64," + base64Data;
+    }
+
+    await pool.query("UPDATE users SET photo_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
+    res.json({ photo_url: dataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// POST /candidates/upload/cv
-app.post("/candidates/upload/cv", auth, upload.single("cv"), async function (req, res) {
+app.post("/candidates/upload/cv", auth, async function (req, res) {
   try {
-    if (!req.file) return res.status(400).json({ error: "CV required" });
-    var b = req.file.buffer.toString("base64");
-    var d = "data:application/pdf;base64," + b;
-    await pool.query("UPDATE users SET cv_url = $1 WHERE id = $2", [d, req.user.userId]);
-    res.json({ cv_url: d });
+    var base64Data = req.body.cv_base64;
+    
+    if (!base64Data) {
+      return res.status(400).json({ error: "cv_base64 is required" });
+    }
+
+    var dataUrl = base64Data;
+    if (!base64Data.startsWith("data:")) {
+      dataUrl = "data:application/pdf;base64," + base64Data;
+    }
+
+    await pool.query("UPDATE users SET cv_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
+    res.json({ cv_url: dataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -262,8 +248,6 @@ app.post("/candidates/upload/cv", auth, upload.single("cv"), async function (req
 /* ===============================
    JOBS ROUTES
 ================================ */
-
-// GET /jobs - Get all jobs (with optional filters)
 app.get("/jobs", async function (req, res) {
   try {
     var queryStr = "SELECT * FROM jobs WHERE 1=1";
@@ -280,7 +264,6 @@ app.get("/jobs", async function (req, res) {
     }
 
     queryStr += " ORDER BY created_at DESC";
-
     var result = await pool.query(queryStr, values);
     res.json(result.rows);
   } catch (e) {
@@ -288,7 +271,6 @@ app.get("/jobs", async function (req, res) {
   }
 });
 
-// GET /jobs/:id - Get single job by ID
 app.get("/jobs/:id", async function (req, res) {
   try {
     var result = await pool.query("SELECT * FROM jobs WHERE id = $1", [req.params.id]);
@@ -301,7 +283,6 @@ app.get("/jobs/:id", async function (req, res) {
   }
 });
 
-// POST /jobs - Create a new job (recruiter only)
 app.post("/jobs", auth, async function (req, res) {
   try {
     var b = req.body;
@@ -311,15 +292,7 @@ app.post("/jobs", auth, async function (req, res) {
 
     var result = await pool.query(
       "INSERT INTO jobs (title, description, qualifications, location, company_name, experience_years, posted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-      [
-        b.title,
-        b.description || null,
-        b.qualifications || null,
-        b.location || null,
-        b.company_name || null,
-        b.experience_years || null,
-        req.user.userId,
-      ]
+      [b.title, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years || null, req.user.userId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -328,21 +301,12 @@ app.post("/jobs", auth, async function (req, res) {
   }
 });
 
-// PUT /jobs/:id - Update a job
 app.put("/jobs/:id", auth, async function (req, res) {
   try {
     var b = req.body;
     var result = await pool.query(
       "UPDATE jobs SET title = COALESCE($1, title), description = COALESCE($2, description), qualifications = COALESCE($3, qualifications), location = COALESCE($4, location), company_name = COALESCE($5, company_name), experience_years = COALESCE($6, experience_years) WHERE id = $7 RETURNING *",
-      [
-        b.title || null,
-        b.description || null,
-        b.qualifications || null,
-        b.location || null,
-        b.company_name || null,
-        b.experience_years !== undefined ? b.experience_years : null,
-        req.params.id,
-      ]
+      [b.title || null, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years !== undefined ? b.experience_years : null, req.params.id]
     );
 
     if (result.rows.length === 0) {
@@ -355,7 +319,6 @@ app.put("/jobs/:id", auth, async function (req, res) {
   }
 });
 
-// DELETE /jobs/:id - Delete a job
 app.delete("/jobs/:id", auth, async function (req, res) {
   try {
     var result = await pool.query("DELETE FROM jobs WHERE id = $1 RETURNING *", [req.params.id]);
@@ -371,8 +334,6 @@ app.delete("/jobs/:id", auth, async function (req, res) {
 /* ===============================
    APPLICATIONS ROUTES
 ================================ */
-
-// POST /applications - Apply for a job
 app.post("/applications", auth, async function (req, res) {
   try {
     var jobId = req.body.job_id;
@@ -387,7 +348,6 @@ app.post("/applications", auth, async function (req, res) {
 
     res.status(201).json(result.rows[0]);
   } catch (e) {
-    // 23505 = unique violation (already applied)
     if (e.code === "23505") {
       return res.status(400).json({ error: "You already applied for this job" });
     }
@@ -395,26 +355,22 @@ app.post("/applications", auth, async function (req, res) {
   }
 });
 
-// GET /applications - Get applications (candidate sees own, recruiter sees all)
 app.get("/applications", auth, async function (req, res) {
   try {
     var queryStr = "SELECT a.*, j.title as job_title, j.location as job_location FROM applications a LEFT JOIN jobs j ON a.job_id = j.id WHERE 1=1";
     var values = [];
 
-    // Candidates only see their own applications
     if (req.user.role === "candidate" || !req.user.role) {
       values.push(req.user.userId);
       queryStr += " AND a.user_id = $" + values.length;
     }
 
-    // Optional status filter
     if (req.query.status) {
       values.push(req.query.status);
       queryStr += " AND a.status = $" + values.length;
     }
 
     queryStr += " ORDER BY a.applied_at DESC";
-
     var result = await pool.query(queryStr, values);
     res.json(result.rows);
   } catch (e) {
@@ -422,7 +378,6 @@ app.get("/applications", auth, async function (req, res) {
   }
 });
 
-// PUT /applications/:id/status - Update application status (recruiter/admin)
 app.put("/applications/:id/status", auth, async function (req, res) {
   try {
     var status = req.body.status;
@@ -448,12 +403,11 @@ app.put("/applications/:id/status", auth, async function (req, res) {
 });
 
 /* ===============================
-   START SERVER + AUTO MIGRATION
+   START SERVER
 ================================ */
 app.listen(PORT, function () {
   console.log("Backend running on port " + PORT);
 
-  // Auto-run migration on startup
   pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())")
   .then(function () { console.log("users table OK"); return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); })
   .then(function () { console.log("jobs table OK"); return pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())"); })

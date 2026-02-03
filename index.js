@@ -45,7 +45,7 @@ function auth(req, res, next) {
 ================================ */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max file size
 });
 
 /* ===============================
@@ -80,7 +80,7 @@ app.post(
     try {
       const base64 = req.file.buffer.toString("base64");
 
-      // Saving to users table (correct table)
+      // Update users table with new photo_url
       await pool.query(
         `
         UPDATE users
@@ -119,7 +119,7 @@ app.post(
     try {
       const base64 = req.file.buffer.toString("base64");
 
-      // Saving to users table (correct table)
+      // Update users table with new cv_url
       await pool.query(
         `
         UPDATE users

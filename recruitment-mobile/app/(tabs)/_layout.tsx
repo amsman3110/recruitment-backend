@@ -30,9 +30,19 @@ export default function TabsLayout() {
         ),
       }}
     >
+      {/* ✅ Visible Tabs */}
       <Tabs.Screen name="index" options={{ title: "Home" }} />
       <Tabs.Screen name="jobs" options={{ title: "Jobs" }} />
       <Tabs.Screen name="explore" options={{ title: "Explore" }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+
+      {/* ❌ Hidden screen (accessible via navigation only) */}
+      <Tabs.Screen
+        name="edit-profile"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,67 +1,44 @@
 require("dotenv").config();
 const { Pool } = require("pg");
 
-/**
- * Determine if DATABASE_URL is usable
- * (Railway injects a real URL in production only)
- */
-const hasValidDatabaseUrl =
-  typeof process.env.DATABASE_URL === "string" &&
-  process.env.DATABASE_URL.startsWith("postgres");
-
-/**
- * Create pool ONLY if DATABASE_URL is valid
- */
-const pool = hasValidDatabaseUrl
+const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
     })
   : null;
 
-/**
- * BE-027
- * Initialize database schema for candidates
- * - Runs ONLY when database is available
- * - Skips safely in local development
- */
 async function initDb() {
   if (!pool) {
-    console.log("Database not initialized (no DATABASE_URL)");
+    console.log("ℹ️ Skipping DB init (no DATABASE_URL)");
     return;
   }
 
-  await pool.query(`
-    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  try {
+    await pool.query(`
+      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-    CREATE TABLE IF NOT EXISTS candidates (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      CREATE TABLE IF NOT EXISTS candidates (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name TEXT NOT NULL,
+        specialization TEXT,
+        current_job_title TEXT,
+        profile_summary TEXT,
+        experience JSONB,
+        technical_skills TEXT[],
+        soft_skills TEXT[],
+        education JSONB,
+        photo_url TEXT,
+        cv_url TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
-      name VARCHAR(150) NOT NULL,
-      email VARCHAR(150) UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-
-      specialization VARCHAR(150),
-      current_job_title VARCHAR(150),
-      profile_summary TEXT,
-      experience TEXT,
-
-      technical_skills TEXT[],
-      soft_skills TEXT[],
-
-      education JSONB,
-      courses JSONB,
-      certificates JSONB,
-
-      cv_url TEXT,
-      photo_url TEXT,
-
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
+    console.log("✅ Database initialized");
+  } catch (err) {
+    console.error("❌ DB INIT ERROR:", err);
+  }
 }
 
-module.exports = {
-  pool,
-  initDb,
-};
+module.exports = pool;
+module.exports.initDb = initDb;

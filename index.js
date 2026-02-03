@@ -3,147 +3,150 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+
 const pool = require("./src/db");
+const { initDb } = require("./src/db");
 
 const app = express();
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
+/* ===============================
+   INITIALIZE DATABASE
+================================ */
+initDb();
+
+/* ===============================
+   MIDDLEWARE
+================================ */
 app.use(cors());
 app.use(express.json());
 
-/* ===============================
-   Helpers (CRITICAL)
-================================ */
-function safeJson(value) {
-  if (!value) return {};
-  if (typeof value === "object") return value;
-
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return typeof parsed === "object" ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  return {};
-}
-
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
+// Log every request (VERY IMPORTANT for debugging)
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
 
 /* ===============================
-   Auth Middleware
+   AUTH MIDDLEWARE
 ================================ */
 function auth(req, res, next) {
   const header = req.headers.authorization;
-  if (!header) return res.status(401).json({ message: "No token" });
+
+  if (!header) {
+    return res.status(401).json({ message: "No token" });
+  }
 
   try {
     const token = header.split(" ")[1];
     req.user = jwt.verify(token, JWT_SECRET);
     next();
-  } catch {
+  } catch (error) {
+    console.error("❌ Invalid token", error);
     return res.status(401).json({ message: "Invalid token" });
   }
 }
 
 /* ===============================
-   Health
+   HEALTH CHECK
 ================================ */
 app.get("/", (_req, res) => {
   res.json({ status: "OK" });
 });
 
 /* ===============================
-   Login
+   DEV LOGIN
 ================================ */
 app.post("/auth/login", (_req, res) => {
-  const token = jwt.sign({ id: 1 }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ id: "dev-user" }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
   res.json({ token });
 });
 
 /* ===============================
-   Save Profile
+   SAVE PROFILE
 ================================ */
 app.post("/profile", auth, async (req, res) => {
+  console.log("➡️ POST /profile BODY:", req.body);
+
   try {
     const {
       name,
-      current_job_title,
       specialization,
+      current_job_title,
       profile_summary,
+      experience,
       technical_skills,
       soft_skills,
-      experience,
       education,
-      cv_url,
       photo_url,
+      cv_url,
     } = req.body;
 
-    const techSkills = safeArray(technical_skills);
-    const softSkills = safeArray(soft_skills);
-    const experienceJson = safeJson(experience);
-    const educationJson = safeJson(education);
+    if (!name) {
+      return res.status(400).json({ message: "Name is required" });
+    }
 
     await pool.query(
       `
       INSERT INTO candidates (
         name,
-        current_job_title,
         specialization,
+        current_job_title,
         profile_summary,
+        experience,
         technical_skills,
         soft_skills,
-        experience,
         education,
-        cv_url,
-        photo_url
+        photo_url,
+        cv_url
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       `,
       [
-        name || null,
-        current_job_title || null,
+        name,
         specialization || null,
+        current_job_title || null,
         profile_summary || null,
-        techSkills,
-        softSkills,
-        experienceJson,
-        educationJson,
-        cv_url || null,
+        experience || {},
+        technical_skills || [],
+        soft_skills || [],
+        education || {},
         photo_url || null,
+        cv_url || null,
       ]
     );
 
+    console.log("✅ Profile saved successfully");
     res.json({ success: true });
   } catch (error) {
-    console.error("SAVE PROFILE ERROR:", error);
+    console.error("❌ SAVE PROFILE ERROR:", error);
     res.status(500).json({ message: "Save failed" });
   }
 });
 
 /* ===============================
-   Load Profile
+   LOAD PROFILE
 ================================ */
 app.get("/profile", auth, async (_req, res) => {
   try {
-    const r = await pool.query(
-      "SELECT * FROM candidates ORDER BY id DESC LIMIT 1"
+    const result = await pool.query(
+      "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
     );
-    res.json(r.rows[0] || {});
+
+    res.json(result.rows[0] || {});
   } catch (error) {
+    console.error("❌ LOAD PROFILE ERROR:", error);
     res.status(500).json({ message: "Load failed" });
   }
 });
 
 /* ===============================
-   Start Server
+   START SERVER
 ================================ */
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
 });

@@ -1,11 +1,50 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect } from "react";
+import {
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { apiPost } from "../services/api";
 
 export default function HomeScreen() {
   const router = useRouter();
 
-  function handleLogout() {
-    // 🚧 DEV LOGOUT: go back to login screen
+  /* ===============================
+     DEV AUTO LOGIN
+  ================================ */
+  useEffect(() => {
+    async function devLogin() {
+      try {
+        const existingToken = await AsyncStorage.getItem("token");
+
+        if (existingToken) {
+          console.log("✅ Token already exists");
+          return;
+        }
+
+        console.log("🔐 Logging in (DEV MODE)...");
+        const res = await apiPost("/auth/login", {});
+        await AsyncStorage.setItem("token", res.token);
+
+        console.log("✅ Token saved");
+      } catch (error) {
+        console.error("❌ DEV LOGIN FAILED", error);
+        Alert.alert("Error", "Dev login failed");
+      }
+    }
+
+    devLogin();
+  }, []);
+
+  /* ===============================
+     LOGOUT
+  ================================ */
+  async function handleLogout() {
+    await AsyncStorage.removeItem("token");
     router.replace("/(auth)/login");
   }
 
@@ -17,13 +56,19 @@ export default function HomeScreen() {
         You are logged in (DEV MODE)
       </Text>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
+/* ===============================
+   STYLES
+================================ */
 const styles = StyleSheet.create({
   container: {
     flex: 1,

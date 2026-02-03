@@ -9,7 +9,7 @@ const pool = new Pool({
 // Function to initialize the database schema
 async function initDb() {
   try {
-    // Path to the schema.sql file
+    // Path to schema.sql (one level up from src folder)
     const schemaPath = path.join(__dirname, "../schema.sql");
 
     // Check if the schema.sql file exists

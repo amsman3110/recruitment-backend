@@ -17,6 +17,22 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Log all requests
+app.use(function(req, res, next) {
+  console.log("📨 Request:", req.method, req.url);
+  console.log("📨 Content-Type:", req.headers['content-type']);
+  console.log("📨 Content-Length:", req.headers['content-length']);
+  next();
+});
+
+// Handle JSON parsing errors
+app.use(function(err, req, res, next) {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error("❌ JSON Parse Error:", err.message);
+    return res.status(400).json({ error: "Invalid JSON" });
+  }
+  next();
+});
 function auth(req, res, next) {
   var header = req.headers.authorization;
   if (!header) return res.status(401).json({ message: "No token" });

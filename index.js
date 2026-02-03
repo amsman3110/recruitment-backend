@@ -1,4 +1,4 @@
-// v3 - Base64 uploads
+// v4 - Base64 uploads with logging
 require("dotenv").config();
 
 var express = require("express");
@@ -13,16 +13,10 @@ var JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
 var pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-/* ===============================
-   MIDDLEWARE
-================================ */
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-/* ===============================
-   AUTH MIDDLEWARE
-================================ */
 function auth(req, res, next) {
   var header = req.headers.authorization;
   if (!header) return res.status(401).json({ message: "No token" });
@@ -35,16 +29,10 @@ function auth(req, res, next) {
   }
 }
 
-/* ===============================
-   HEALTH CHECK
-================================ */
 app.get("/", function (req, res) {
   res.json({ status: "OK" });
 });
 
-/* ===============================
-   MIGRATION ROUTE
-================================ */
 app.get("/run-migration", async function (req, res) {
   try {
     await pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
@@ -68,9 +56,6 @@ app.get("/run-migration", async function (req, res) {
   }
 });
 
-/* ===============================
-   AUTH ROUTES
-================================ */
 app.post("/auth/register", async function (req, res) {
   try {
     var email = req.body.email;
@@ -101,7 +86,6 @@ app.post("/auth/login", async function (req, res) {
     var email = req.body.email;
     var password = req.body.password;
 
-    // DEV MODE
     if (!email && !password) {
       var devResult = await pool.query(
         "INSERT INTO users (email, role) VALUES ('dev@example.com', 'candidate') ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id"
@@ -140,9 +124,6 @@ app.post("/auth/login", async function (req, res) {
   }
 });
 
-/* ===============================
-   PROFILE ROUTES
-================================ */
 app.get("/candidate/profile", auth, async function (req, res) {
   try {
     var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
@@ -201,32 +182,43 @@ app.post("/candidates/me", auth, async function (req, res) {
   }
 });
 
-/* ===============================
-   FILE UPLOAD ROUTES - BASE64
-================================ */
 app.post("/candidates/upload/photo", auth, async function (req, res) {
   try {
+    console.log("=== PHOTO UPLOAD DEBUG ===");
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("photo_base64 exists:", !!req.body.photo_base64);
+    console.log("photo_base64 type:", typeof req.body.photo_base64);
+    console.log("photo_base64 length:", req.body.photo_base64 ? req.body.photo_base64.length : 0);
+    
     var base64Data = req.body.photo_base64;
     
     if (!base64Data) {
+      console.log("ERROR: photo_base64 is missing or empty");
       return res.status(400).json({ error: "photo_base64 is required" });
     }
 
-    // If it doesn't have data URI prefix, add it
     var dataUrl = base64Data;
     if (!base64Data.startsWith("data:")) {
       dataUrl = "data:image/jpeg;base64," + base64Data;
     }
 
+    console.log("Saving photo to database, length:", dataUrl.length);
     await pool.query("UPDATE users SET photo_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
+    console.log("Photo saved successfully");
+    
     res.json({ photo_url: dataUrl });
   } catch (e) {
+    console.log("Photo upload error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
 app.post("/candidates/upload/cv", auth, async function (req, res) {
   try {
+    console.log("=== CV UPLOAD DEBUG ===");
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("cv_base64 exists:", !!req.body.cv_base64);
+    
     var base64Data = req.body.cv_base64;
     
     if (!base64Data) {
@@ -245,9 +237,6 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
   }
 });
 
-/* ===============================
-   JOBS ROUTES
-================================ */
 app.get("/jobs", async function (req, res) {
   try {
     var queryStr = "SELECT * FROM jobs WHERE 1=1";
@@ -331,9 +320,6 @@ app.delete("/jobs/:id", auth, async function (req, res) {
   }
 });
 
-/* ===============================
-   APPLICATIONS ROUTES
-================================ */
 app.post("/applications", auth, async function (req, res) {
   try {
     var jobId = req.body.job_id;
@@ -402,9 +388,6 @@ app.put("/applications/:id/status", auth, async function (req, res) {
   }
 });
 
-/* ===============================
-   START SERVER
-================================ */
 app.listen(PORT, function () {
   console.log("Backend running on port " + PORT);
 

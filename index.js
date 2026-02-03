@@ -80,17 +80,14 @@ app.post(
     try {
       const base64 = req.file.buffer.toString("base64");
 
+      // Saving to users table (correct table)
       await pool.query(
         `
-        UPDATE candidates
+        UPDATE users
         SET photo_url = $1
-        WHERE id = (
-          SELECT id FROM candidates
-          ORDER BY created_at DESC
-          LIMIT 1
-        )
+        WHERE id = $2 AND role = 'candidate'
         `,
-        [`data:${req.file.mimetype};base64,${base64}`]
+        [`data:${req.file.mimetype};base64,${base64}`, req.user.userId]
       );
 
       res.json({
@@ -122,17 +119,14 @@ app.post(
     try {
       const base64 = req.file.buffer.toString("base64");
 
+      // Saving to users table (correct table)
       await pool.query(
         `
-        UPDATE candidates
+        UPDATE users
         SET cv_url = $1
-        WHERE id = (
-          SELECT id FROM candidates
-          ORDER BY created_at DESC
-          LIMIT 1
-        )
+        WHERE id = $2 AND role = 'candidate'
         `,
-        [`data:application/pdf;base64,${base64}`]
+        [`data:application/pdf;base64,${base64}`, req.user.userId]
       );
 
       res.json({
@@ -151,7 +145,8 @@ app.post(
 app.get("/candidates/me", auth, async (_req, res) => {
   try {
     const r = await pool.query(
-      `SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1`
+      `SELECT * FROM users WHERE id = $1 AND role = 'candidate'`,
+      [req.user.userId]
     );
     res.json(r.rows[0] || {});
   } catch (e) {
@@ -176,15 +171,15 @@ app.post("/candidates/me", auth, async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO candidates (
-        name,
-        current_job_title,
-        specialization,
-        profile_summary,
-        photo_url,
-        cv_url
-      )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      UPDATE users
+      SET
+        name = $1,
+        current_job_title = $2,
+        specialization = $3,
+        profile_summary = $4,
+        photo_url = $5,
+        cv_url = $6
+      WHERE id = $7 AND role = 'candidate'
       `,
       [
         name,
@@ -193,6 +188,7 @@ app.post("/candidates/me", auth, async (req, res) => {
         profile_summary,
         photo_url,
         cv_url,
+        req.user.userId,
       ]
     );
 

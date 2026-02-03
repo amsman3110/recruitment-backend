@@ -5,16 +5,11 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 
-const { pool, initDb } = require("./src/db");
+const { pool } = require("./src/db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
-
-/* ===============================
-   INIT DATABASE ON STARTUP
-================================ */
-initDb();
 
 /* ===============================
    MIDDLEWARE
@@ -58,17 +53,20 @@ app.get("/", (_req, res) => {
    DEV LOGIN (AUTO-CREATE USER)
 ================================ */
 app.post("/auth/login", async (_req, res) => {
-  const result = await pool.query(`
-    INSERT INTO users (email, role)
-    VALUES ('dev@example.com', 'candidate')
-    ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-    RETURNING id
-  `);
+  try {
+    const result = await pool.query(`
+      INSERT INTO users (email, role)
+      VALUES ('dev@example.com', 'candidate')
+      ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+      RETURNING id
+    `);
 
-  const userId = result.rows[0].id;
-
-  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
-  res.json({ token });
+    const userId = result.rows[0].id;
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 /* ===============================
@@ -156,8 +154,64 @@ app.post("/candidates/me", auth, async (req, res) => {
 });
 
 /* ===============================
-   START SERVER
+   INIT DATABASE AND START SERVER
+   Migration runs BEFORE server starts
 ================================ */
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-});
+async function startServer() {
+  try {
+    console.log("Initializing database...");
+
+    // Step 1: Create tables from schema.sql
+    const fs = require("fs");
+    const path = require("path");
+    const schemaPath = path.join(__dirname, "schema.sql");
+
+    if (fs.existsSync(schemaPath)) {
+      const schema = fs.readFileSync(schemaPath, "utf-8");
+      await pool.query(schema);
+      console.log("Database schema initialized successfully.");
+    } else {
+      console.log("Schema file not found.");
+    }
+
+    // Step 2: Run migrations
+    console.log("Running database migration...");
+
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[];");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[];");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT;");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS education TEXT;");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT;");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER;");
+
+    // Check if password_hash exists and rename to password
+    var checkColumn = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash';");
+    if (checkColumn.rows.length > 0) {
+      await pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password;");
+      console.log("Renamed password_hash to password");
+    }
+
+    // Unique constraint on applications
+    await pool.query("ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_user_job_unique;");
+    await pool.query("ALTER TABLE applications ADD CONSTRAINT applications_user_job_unique UNIQUE(user_id, job_id);");
+
+    console.log("Migration completed successfully!");
+
+    // Verify columns
+    var result = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users';");
+    console.log("Users table now has " + result.rows.length + " columns");
+
+  } catch (error) {
+    console.error("Database initialization failed: " + error.message);
+  }
+
+  // Step 3: Start the server AFTER migration is done
+  app.listen(PORT, () => {
+    console.log("Backend running on port " + PORT);
+  });
+}
+
+// START EVERYTHING
+startServer();

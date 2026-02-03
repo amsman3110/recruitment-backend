@@ -5,16 +5,14 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 
-const pool = require("./src/db");
-const { initDb } = require("./src/db");
+const { pool, initDb } = require("./src/db");
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
 /* ===============================
-   INIT DATABASE
+   INIT DATABASE ON STARTUP
 ================================ */
 initDb();
 
@@ -41,11 +39,11 @@ function auth(req, res, next) {
 }
 
 /* ===============================
-   MULTER (MEMORY STORAGE)
+   MULTER (MEMORY)
 ================================ */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max file size
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 /* ===============================
@@ -56,147 +54,104 @@ app.get("/", (_req, res) => {
 });
 
 /* ===============================
-   DEV LOGIN
+   DEV LOGIN (AUTO-CREATE USER)
 ================================ */
-app.post("/auth/login", (_req, res) => {
-  const token = jwt.sign({ userId: "dev-user" }, JWT_SECRET, {
-    expiresIn: "7d",
-  });
+app.post("/auth/login", async (_req, res) => {
+  const result = await pool.query(`
+    INSERT INTO users (email, role)
+    VALUES ('dev@example.com', 'candidate')
+    ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+    RETURNING id
+  `);
+
+  const userId = result.rows[0].id;
+
+  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
   res.json({ token });
 });
 
 /* ===============================
    UPLOAD PHOTO
 ================================ */
-app.post(
-  "/candidates/upload/photo",
-  auth,
-  upload.single("photo"),
-  async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: "Photo file is required" });
-    }
+app.post("/candidates/upload/photo", auth, upload.single("photo"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Photo required" });
 
-    try {
-      const base64 = req.file.buffer.toString("base64");
+  const base64 = req.file.buffer.toString("base64");
+  const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
 
-      // Update users table with new photo_url
-      await pool.query(
-        `
-        UPDATE users
-        SET photo_url = $1
-        WHERE id = $2 AND role = 'candidate'
-        `,
-        [`data:${req.file.mimetype};base64,${base64}`, req.user.userId]
-      );
+  await pool.query(
+    `UPDATE users SET photo_url = $1 WHERE id = $2`,
+    [dataUrl, req.user.userId]
+  );
 
-      res.json({
-        photo_url: `data:${req.file.mimetype};base64,${base64}`,
-      });
-    } catch (e) {
-      console.error("PHOTO UPLOAD ERROR:", e.message);
-      res.status(500).json({ error: "Photo upload failed" });
-    }
-  }
-);
+  res.json({ photo_url: dataUrl });
+});
 
 /* ===============================
    UPLOAD CV
 ================================ */
-app.post(
-  "/candidates/upload/cv",
-  auth,
-  upload.single("cv"),
-  async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: "CV file is required" });
-    }
+app.post("/candidates/upload/cv", auth, upload.single("cv"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "CV required" });
 
-    if (req.file.mimetype !== "application/pdf") {
-      return res.status(400).json({ error: "Only PDF files allowed" });
-    }
+  const base64 = req.file.buffer.toString("base64");
+  const dataUrl = `data:application/pdf;base64,${base64}`;
 
-    try {
-      const base64 = req.file.buffer.toString("base64");
+  await pool.query(
+    `UPDATE users SET cv_url = $1 WHERE id = $2`,
+    [dataUrl, req.user.userId]
+  );
 
-      // Update users table with new cv_url
-      await pool.query(
-        `
-        UPDATE users
-        SET cv_url = $1
-        WHERE id = $2 AND role = 'candidate'
-        `,
-        [`data:application/pdf;base64,${base64}`, req.user.userId]
-      );
-
-      res.json({
-        cv_url: `data:application/pdf;base64,${base64}`,
-      });
-    } catch (e) {
-      console.error("CV UPLOAD ERROR:", e.message);
-      res.status(500).json({ error: "CV upload failed" });
-    }
-  }
-);
+  res.json({ cv_url: dataUrl });
+});
 
 /* ===============================
    LOAD PROFILE
 ================================ */
-app.get("/candidates/me", auth, async (_req, res) => {
-  try {
-    const r = await pool.query(
-      `SELECT * FROM users WHERE id = $1 AND role = 'candidate'`,
-      [req.user.userId]
-    );
-    res.json(r.rows[0] || {});
-  } catch (e) {
-    console.error("LOAD PROFILE ERROR:", e.message);
-    res.status(500).json({ message: "Load failed" });
-  }
+app.get("/candidates/me", auth, async (req, res) => {
+  const r = await pool.query(
+    `SELECT * FROM users WHERE id = $1`,
+    [req.user.userId]
+  );
+  res.json(r.rows[0] || {});
 });
 
 /* ===============================
    SAVE PROFILE
 ================================ */
 app.post("/candidates/me", auth, async (req, res) => {
-  try {
-    const {
+  const {
+    name,
+    current_job_title,
+    specialization,
+    profile_summary,
+    photo_url,
+    cv_url,
+  } = req.body;
+
+  await pool.query(
+    `
+    UPDATE users SET
+      name = $1,
+      current_job_title = $2,
+      specialization = $3,
+      profile_summary = $4,
+      photo_url = $5,
+      cv_url = $6,
+      updated_at = NOW()
+    WHERE id = $7
+    `,
+    [
       name,
       current_job_title,
       specialization,
       profile_summary,
       photo_url,
       cv_url,
-    } = req.body;
+      req.user.userId,
+    ]
+  );
 
-    await pool.query(
-      `
-      UPDATE users
-      SET
-        name = $1,
-        current_job_title = $2,
-        specialization = $3,
-        profile_summary = $4,
-        photo_url = $5,
-        cv_url = $6
-      WHERE id = $7 AND role = 'candidate'
-      `,
-      [
-        name,
-        current_job_title,
-        specialization,
-        profile_summary,
-        photo_url,
-        cv_url,
-        req.user.userId,
-      ]
-    );
-
-    res.json({ success: true });
-  } catch (e) {
-    console.error("SAVE PROFILE ERROR:", e.message);
-    res.status(500).json({ message: "Save failed" });
-  }
+  res.json({ success: true });
 });
 
 /* ===============================

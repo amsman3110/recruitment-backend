@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -14,13 +15,9 @@ import {
 } from "react-native";
 import { apiGet, apiPost } from "../services/api";
 
-const BACKEND_URL =
-  "https://recruitment-backend-production-6075.up.railway.app";
-
 export default function EditProfileScreen() {
   const router = useRouter();
 
-  // States for the form fields
   const [name, setName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [specialization, setSpecialization] = useState("");
@@ -38,7 +35,6 @@ export default function EditProfileScreen() {
   const [certificates, setCertificates] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Fetch profile data to pre-fill form
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true);
@@ -67,7 +63,6 @@ export default function EditProfileScreen() {
     loadProfile();
   }, []);
 
-  // Handle photo pick
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -82,7 +77,6 @@ export default function EditProfileScreen() {
     }
   };
 
-  // Handle CV pick
   const pickCV = async () => {
     let result = await DocumentPicker.getDocumentAsync({
       type: "application/pdf",
@@ -95,74 +89,77 @@ export default function EditProfileScreen() {
     }
   };
 
-  // Upload photo to backend, returns the saved photo_url
   const uploadPhoto = async () => {
     try {
-      const formData = new FormData();
-      formData.append("photo", {
-        uri: photo,
-        type: "image/jpeg",
-        name: "profile_photo.jpg",
+      console.log("Converting photo to base64...");
+      
+      // Read file as base64
+      const base64 = await FileSystem.readAsStringAsync(photo, {
+        encoding: FileSystem.EncodingType.Base64,
       });
-      const result = await apiPost("/candidates/upload/photo", formData);
+
+      console.log("Uploading photo to backend...");
+      
+      const result = await apiPost("/candidates/upload/photo", {
+        photo_base64: base64,
+      });
+      
+      console.log("Photo uploaded successfully!");
       return result.photo_url;
     } catch (error) {
       console.log("Photo upload error:", error);
-      return null;
+      Alert.alert("Photo Upload Failed", "Could not upload photo. Continuing without it.");
+      return photo;
     }
   };
 
-  // Upload CV to backend, returns the saved cv_url
   const uploadCV = async () => {
     try {
-      const formData = new FormData();
-      formData.append("cv", {
-        uri: cvUrl,
-        type: "application/pdf",
-        name: cvName || "cv_file.pdf",
+      console.log("Converting CV to base64...");
+      
+      const base64 = await FileSystem.readAsStringAsync(cvUrl, {
+        encoding: FileSystem.EncodingType.Base64,
       });
-      const result = await apiPost("/candidates/upload/cv", formData);
+
+      console.log("Uploading CV to backend...");
+      
+      const result = await apiPost("/candidates/upload/cv", {
+        cv_base64: base64,
+      });
+      
+      console.log("CV uploaded successfully!");
       return result.cv_url;
     } catch (error) {
       console.log("CV upload error:", error);
-      return null;
+      Alert.alert("CV Upload Failed", "Could not upload CV. Continuing without it.");
+      return cvUrl;
     }
   };
 
-  // Handle form submission
   const handleSave = async () => {
     setLoading(true);
 
     try {
-      var savedPhotoUrl = photo;
-      var savedCvUrl = cvUrl;
+      let savedPhotoUrl = photo;
+      let savedCvUrl = cvUrl;
 
-      // Step 1: If photo changed, upload it first
-      if (photoChanged) {
-        console.log("Uploading photo...");
-        var newPhotoUrl = await uploadPhoto();
+      // If photo changed and is a local file (not a data URL), upload it
+      if (photoChanged && photo && !photo.startsWith("data:")) {
+        const newPhotoUrl = await uploadPhoto();
         if (newPhotoUrl) {
           savedPhotoUrl = newPhotoUrl;
-          console.log("Photo uploaded successfully");
-        } else {
-          Alert.alert("Warning", "Photo upload failed, saving other fields.");
         }
       }
 
-      // Step 2: If CV changed, upload it first
-      if (cvChanged) {
-        console.log("Uploading CV...");
-        var newCvUrl = await uploadCV();
+      // If CV changed and is a local file, upload it
+      if (cvChanged && cvUrl && !cvUrl.startsWith("data:")) {
+        const newCvUrl = await uploadCV();
         if (newCvUrl) {
           savedCvUrl = newCvUrl;
-          console.log("CV uploaded successfully");
-        } else {
-          Alert.alert("Warning", "CV upload failed, saving other fields.");
         }
       }
 
-      // Step 3: Save all profile text fields as JSON
-      var profileData = {
+      const profileData = {
         name: name,
         jobTitle: jobTitle,
         specialization: specialization,
@@ -208,7 +205,6 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Photo */}
       <View style={styles.photoContainer}>
         <Image
           source={{
@@ -221,44 +217,43 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Name */}
       <Text style={styles.label}>Name</Text>
       <TextInput
         style={styles.input}
         placeholder="Name"
+        placeholderTextColor="#888"
         value={name}
         onChangeText={setName}
       />
 
-      {/* Job Title */}
       <Text style={styles.label}>Job Title</Text>
       <TextInput
         style={styles.input}
         placeholder="Job Title"
+        placeholderTextColor="#888"
         value={jobTitle}
         onChangeText={setJobTitle}
       />
 
-      {/* Specialization */}
       <Text style={styles.label}>Specialization</Text>
       <TextInput
         style={styles.input}
         placeholder="Specialization"
+        placeholderTextColor="#888"
         value={specialization}
         onChangeText={setSpecialization}
       />
 
-      {/* Profile Summary */}
       <Text style={styles.label}>Profile Summary</Text>
       <TextInput
         style={[styles.input, { minHeight: 80 }]}
         placeholder="Profile Summary"
+        placeholderTextColor="#888"
         value={summary}
         onChangeText={setSummary}
         multiline={true}
       />
 
-      {/* CV */}
       <Text style={styles.label}>CV (PDF)</Text>
       <View style={styles.cvContainer}>
         <TouchableOpacity onPress={pickCV} style={styles.cvButton}>
@@ -269,71 +264,70 @@ export default function EditProfileScreen() {
         {cvName && <Text style={styles.cvNameText}>📄 {cvName}</Text>}
       </View>
 
-      {/* Technical Skills */}
       <Text style={styles.label}>Technical Skills (comma separated)</Text>
       <TextInput
         style={styles.input}
         placeholder="e.g. React, Node.js, SQL"
+        placeholderTextColor="#888"
         value={technicalSkills.join(", ")}
         onChangeText={(text) =>
           setTechnicalSkills(text.split(",").map((s) => s.trim()).filter(Boolean))
         }
       />
 
-      {/* Soft Skills */}
       <Text style={styles.label}>Soft Skills (comma separated)</Text>
       <TextInput
         style={styles.input}
         placeholder="e.g. Communication, Teamwork"
+        placeholderTextColor="#888"
         value={softSkills.join(", ")}
         onChangeText={(text) =>
           setSoftSkills(text.split(",").map((s) => s.trim()).filter(Boolean))
         }
       />
 
-      {/* Experience */}
       <Text style={styles.label}>Experience</Text>
       <TextInput
         style={[styles.input, { minHeight: 80 }]}
         placeholder="Describe your experience"
+        placeholderTextColor="#888"
         value={experience}
         onChangeText={setExperience}
         multiline={true}
       />
 
-      {/* Education */}
       <Text style={styles.label}>Education</Text>
       <TextInput
         style={styles.input}
         placeholder="e.g. Computer Science, MIT"
+        placeholderTextColor="#888"
         value={education}
         onChangeText={setEducation}
       />
 
-      {/* Courses */}
       <Text style={styles.label}>Courses</Text>
       <TextInput
         style={styles.input}
         placeholder="Any relevant courses"
+        placeholderTextColor="#888"
         value={courses}
         onChangeText={setCourses}
       />
 
-      {/* Certificates */}
       <Text style={styles.label}>Certificates</Text>
       <TextInput
         style={styles.input}
         placeholder="Any certificates"
+        placeholderTextColor="#888"
         value={certificates}
         onChangeText={setCertificates}
       />
 
-      {/* Save Button */}
       <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
         <Text style={styles.saveButtonText}>Save Changes</Text>
       </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 200 }} />
     </ScrollView>
   );
 }

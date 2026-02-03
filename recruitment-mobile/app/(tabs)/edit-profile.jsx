@@ -26,8 +26,10 @@ export default function EditProfileScreen() {
   const [specialization, setSpecialization] = useState("");
   const [summary, setSummary] = useState("");
   const [photo, setPhoto] = useState(null);
+  const [photoChanged, setPhotoChanged] = useState(false);
   const [cvUrl, setCvUrl] = useState(null);
   const [cvName, setCvName] = useState(null);
+  const [cvChanged, setCvChanged] = useState(false);
   const [technicalSkills, setTechnicalSkills] = useState([]);
   const [softSkills, setSoftSkills] = useState([]);
   const [experience, setExperience] = useState("");
@@ -41,21 +43,20 @@ export default function EditProfileScreen() {
     const loadProfile = async () => {
       setLoading(true);
       try {
-        const response = await apiGet("/candidate/profile");
-        const profile = response || {};
-        setName(profile.name || "");
-        setJobTitle(profile.current_job_title || "");
-        setSpecialization(profile.specialization || "");
-        setSummary(profile.profile_summary || "");
-        setPhoto(profile.photo_url || null);
-        setCvUrl(profile.cv_url || null);
-        setCvName(profile.cv_name || null);
-        setTechnicalSkills(profile.technical_skills || []);
-        setSoftSkills(profile.soft_skills || []);
-        setExperience(profile.experience || "");
-        setEducation(profile.education || "");
-        setCourses(profile.courses || "");
-        setCertificates(profile.certificates || "");
+        const profile = await apiGet("/candidate/profile");
+        const data = profile || {};
+        setName(data.name || "");
+        setJobTitle(data.current_job_title || "");
+        setSpecialization(data.specialization || "");
+        setSummary(data.profile_summary || "");
+        setPhoto(data.photo_url || null);
+        setCvUrl(data.cv_url || null);
+        setTechnicalSkills(data.technical_skills || []);
+        setSoftSkills(data.soft_skills || []);
+        setExperience(data.experience || "");
+        setEducation(data.education || "");
+        setCourses(data.courses || "");
+        setCertificates(data.certificates || "");
       } catch (error) {
         console.log("Error loading profile:", error);
         Alert.alert("Error", "Could not load profile data.");
@@ -66,21 +67,22 @@ export default function EditProfileScreen() {
     loadProfile();
   }, []);
 
-  // Handle photo upload
+  // Handle photo pick
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
+      aspect: [1, 1],
+      quality: 0.8,
     });
 
-    if (!result.cancelled) {
-      setPhoto(result.uri);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setPhoto(result.assets[0].uri);
+      setPhotoChanged(true);
     }
   };
 
-  // Handle CV upload
+  // Handle CV pick
   const pickCV = async () => {
     let result = await DocumentPicker.getDocumentAsync({
       type: "application/pdf",
@@ -89,44 +91,95 @@ export default function EditProfileScreen() {
     if (result.type === "success") {
       setCvUrl(result.uri);
       setCvName(result.name);
+      setCvChanged(true);
+    }
+  };
+
+  // Upload photo to backend, returns the saved photo_url
+  const uploadPhoto = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("photo", {
+        uri: photo,
+        type: "image/jpeg",
+        name: "profile_photo.jpg",
+      });
+      const result = await apiPost("/candidates/upload/photo", formData);
+      return result.photo_url;
+    } catch (error) {
+      console.log("Photo upload error:", error);
+      return null;
+    }
+  };
+
+  // Upload CV to backend, returns the saved cv_url
+  const uploadCV = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("cv", {
+        uri: cvUrl,
+        type: "application/pdf",
+        name: cvName || "cv_file.pdf",
+      });
+      const result = await apiPost("/candidates/upload/cv", formData);
+      return result.cv_url;
+    } catch (error) {
+      console.log("CV upload error:", error);
+      return null;
     }
   };
 
   // Handle form submission
   const handleSave = async () => {
     setLoading(true);
-    
-    const formData = new FormData();
-
-    // Add text fields
-    formData.append("name", name);
-    formData.append("jobTitle", jobTitle);
-    formData.append("specialization", specialization);
-    formData.append("summary", summary);
-
-    // Add photo if exists
-    if (photo) {
-      const photoData = {
-        uri: photo,
-        type: "image/jpeg", // Adjust according to your image type
-        name: "profile_photo.jpg",
-      };
-      formData.append("photo", photoData);
-    }
-
-    // Add CV if exists
-    if (cvUrl) {
-      const cvData = {
-        uri: cvUrl,
-        type: "application/pdf", // Assuming PDF type for the CV
-        name: cvName || "cv_file.pdf",
-      };
-      formData.append("cv", cvData);
-    }
 
     try {
-      await apiPost("/candidate/update-profile", formData);
-      Alert.alert("Success", "Profile updated successfully");
+      var savedPhotoUrl = photo;
+      var savedCvUrl = cvUrl;
+
+      // Step 1: If photo changed, upload it first
+      if (photoChanged) {
+        console.log("Uploading photo...");
+        var newPhotoUrl = await uploadPhoto();
+        if (newPhotoUrl) {
+          savedPhotoUrl = newPhotoUrl;
+          console.log("Photo uploaded successfully");
+        } else {
+          Alert.alert("Warning", "Photo upload failed, saving other fields.");
+        }
+      }
+
+      // Step 2: If CV changed, upload it first
+      if (cvChanged) {
+        console.log("Uploading CV...");
+        var newCvUrl = await uploadCV();
+        if (newCvUrl) {
+          savedCvUrl = newCvUrl;
+          console.log("CV uploaded successfully");
+        } else {
+          Alert.alert("Warning", "CV upload failed, saving other fields.");
+        }
+      }
+
+      // Step 3: Save all profile text fields as JSON
+      var profileData = {
+        name: name,
+        jobTitle: jobTitle,
+        specialization: specialization,
+        summary: summary,
+        photo_url: savedPhotoUrl,
+        cv_url: savedCvUrl,
+        technicalSkills: technicalSkills,
+        softSkills: softSkills,
+        experience: experience,
+        education: education,
+        courses: courses,
+        certificates: certificates,
+      };
+
+      await apiPost("/candidate/update-profile", profileData);
+
+      Alert.alert("Success", "Profile updated successfully!");
       router.push("/profile");
     } catch (error) {
       console.log("Error updating profile:", error);
@@ -137,7 +190,13 @@ export default function EditProfileScreen() {
   };
 
   if (loading) {
-    return <Text>Loading profile...</Text>;
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: "#ffffff", textAlign: "center", marginTop: 40 }}>
+          Loading...
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -192,59 +251,61 @@ export default function EditProfileScreen() {
       {/* Profile Summary */}
       <Text style={styles.label}>Profile Summary</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { minHeight: 80 }]}
         placeholder="Profile Summary"
         value={summary}
         onChangeText={setSummary}
+        multiline={true}
       />
 
       {/* CV */}
-      <Text style={styles.label}>CV</Text>
+      <Text style={styles.label}>CV (PDF)</Text>
       <View style={styles.cvContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="CV URL"
-          value={cvUrl}
-          onChangeText={setCvUrl}
-        />
-        <TouchableOpacity onPress={pickCV}>
-          <Text style={styles.changeCVText}>Change CV</Text>
+        <TouchableOpacity onPress={pickCV} style={styles.cvButton}>
+          <Text style={styles.changeCVText}>
+            {cvChanged ? "CV Selected ✓" : cvUrl ? "Change CV" : "Upload CV"}
+          </Text>
         </TouchableOpacity>
-        {cvName && <Text style={styles.cvNameText}>{cvName}</Text>}
+        {cvName && <Text style={styles.cvNameText}>📄 {cvName}</Text>}
       </View>
 
       {/* Technical Skills */}
-      <Text style={styles.label}>Technical Skills</Text>
+      <Text style={styles.label}>Technical Skills (comma separated)</Text>
       <TextInput
         style={styles.input}
-        placeholder="Technical Skills"
+        placeholder="e.g. React, Node.js, SQL"
         value={technicalSkills.join(", ")}
-        onChangeText={(text) => setTechnicalSkills(text.split(", "))}
+        onChangeText={(text) =>
+          setTechnicalSkills(text.split(",").map((s) => s.trim()).filter(Boolean))
+        }
       />
 
       {/* Soft Skills */}
-      <Text style={styles.label}>Soft Skills</Text>
+      <Text style={styles.label}>Soft Skills (comma separated)</Text>
       <TextInput
         style={styles.input}
-        placeholder="Soft Skills"
+        placeholder="e.g. Communication, Teamwork"
         value={softSkills.join(", ")}
-        onChangeText={(text) => setSoftSkills(text.split(", "))}
+        onChangeText={(text) =>
+          setSoftSkills(text.split(",").map((s) => s.trim()).filter(Boolean))
+        }
       />
 
       {/* Experience */}
       <Text style={styles.label}>Experience</Text>
       <TextInput
-        style={styles.input}
-        placeholder="Experience"
+        style={[styles.input, { minHeight: 80 }]}
+        placeholder="Describe your experience"
         value={experience}
         onChangeText={setExperience}
+        multiline={true}
       />
 
       {/* Education */}
       <Text style={styles.label}>Education</Text>
       <TextInput
         style={styles.input}
-        placeholder="Education"
+        placeholder="e.g. Computer Science, MIT"
         value={education}
         onChangeText={setEducation}
       />
@@ -253,7 +314,7 @@ export default function EditProfileScreen() {
       <Text style={styles.label}>Courses</Text>
       <TextInput
         style={styles.input}
-        placeholder="Courses"
+        placeholder="Any relevant courses"
         value={courses}
         onChangeText={setCourses}
       />
@@ -262,7 +323,7 @@ export default function EditProfileScreen() {
       <Text style={styles.label}>Certificates</Text>
       <TextInput
         style={styles.input}
-        placeholder="Certificates"
+        placeholder="Any certificates"
         value={certificates}
         onChangeText={setCertificates}
       />
@@ -271,6 +332,8 @@ export default function EditProfileScreen() {
       <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
         <Text style={styles.saveButtonText}>Save Changes</Text>
       </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -306,9 +369,11 @@ const styles = StyleSheet.create({
     height: 40,
     borderColor: "gray",
     borderWidth: 1,
+    borderRadius: 6,
     marginBottom: 10,
-    paddingLeft: 8,
+    paddingLeft: 10,
     color: "#ffffff",
+    backgroundColor: "#1e1e1e",
   },
   photoContainer: {
     alignItems: "center",
@@ -322,9 +387,17 @@ const styles = StyleSheet.create({
   changePhotoText: {
     color: "#007BFF",
     fontWeight: "bold",
+    marginTop: 8,
   },
   cvContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  cvButton: {
+    borderWidth: 1,
+    borderColor: "#007BFF",
+    borderRadius: 6,
+    padding: 10,
+    alignItems: "center",
   },
   changeCVText: {
     color: "#007BFF",
@@ -332,17 +405,18 @@ const styles = StyleSheet.create({
   },
   cvNameText: {
     color: "#dddddd",
-    marginTop: 5,
+    marginTop: 6,
   },
   saveButton: {
     backgroundColor: "#007BFF",
-    padding: 10,
-    borderRadius: 5,
+    padding: 14,
+    borderRadius: 6,
     marginTop: 20,
   },
   saveButtonText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "bold",
+    fontSize: 16,
   },
 });

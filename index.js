@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const { pool } = require("./src/db");
+const pool = require("./src/db"); // ✅ FIX: direct import
 
 const app = express();
 
@@ -22,11 +22,7 @@ app.use(express.json());
 /* ===============================
    ENSURE UPLOAD DIRECTORIES
 ================================ */
-const uploadDirs = [
-  "uploads",
-  "uploads/photos",
-  "uploads/cv",
-];
+const uploadDirs = ["uploads", "uploads/photos", "uploads/cv"];
 
 uploadDirs.forEach((dir) => {
   const fullPath = path.join(__dirname, dir);
@@ -59,22 +55,19 @@ function auth(req, res, next) {
 /* ===============================
    MULTER CONFIG
 ================================ */
-const photoStorage = multer.diskStorage({
-  destination: path.join(__dirname, "uploads/photos"),
-  filename: (_, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+const uploadPhoto = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, "uploads/photos"),
+    filename: (_, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+  }),
 });
 
-const cvStorage = multer.diskStorage({
-  destination: path.join(__dirname, "uploads/cv"),
-  filename: (_, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+const uploadCV = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, "uploads/cv"),
+    filename: (_, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+  }),
 });
-
-const uploadPhoto = multer({ storage: photoStorage });
-const uploadCV = multer({ storage: cvStorage });
 
 /* ===============================
    HEALTH CHECK
@@ -84,46 +77,12 @@ app.get("/", (_req, res) => {
 });
 
 /* ===============================
-   DEV LOGIN (TEMP)
+   DEV LOGIN
 ================================ */
 app.post("/auth/login", (_req, res) => {
-  const token = jwt.sign({ id: 1 }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ userId: 1 }, JWT_SECRET, { expiresIn: "7d" });
   res.json({ token });
 });
-
-/* ===============================
-   CANDIDATES: UPLOAD PHOTO
-================================ */
-app.post(
-  "/candidates/upload/photo",
-  auth,
-  uploadPhoto.single("photo"),
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    const photoUrl = "/uploads/photos/" + req.file.filename;
-    res.json({ photo_url: photoUrl });
-  }
-);
-
-/* ===============================
-   CANDIDATES: UPLOAD CV
-================================ */
-app.post(
-  "/candidates/upload/cv",
-  auth,
-  uploadCV.single("cv"),
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    const cvUrl = "/uploads/cv/" + req.file.filename;
-    res.json({ cv_url: cvUrl });
-  }
-);
 
 /* ===============================
    CANDIDATES: LOAD PROFILE
@@ -133,7 +92,6 @@ app.get("/candidates/me", auth, async (_req, res) => {
     const r = await pool.query(
       "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
     );
-
     res.json(r.rows[0] || {});
   } catch (e) {
     console.error("LOAD PROFILE ERROR:", e.message);

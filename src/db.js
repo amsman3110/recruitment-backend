@@ -10,7 +10,7 @@ const pool = new Pool({
 async function initDb() {
   try {
     // Path to the schema.sql file in the 'src' folder
-    const schemaPath = path.join(__dirname, "schema.sql");
+    const schemaPath = path.join(__dirname, "../schema.sql");
 
     // Check if the schema.sql file exists
     if (fs.existsSync(schemaPath)) {
@@ -18,12 +18,20 @@ async function initDb() {
 
       // Execute the schema file to create tables and structures
       await pool.query(schema);
-      console.log("Database schema initialized successfully.");
+      console.log("✅ Database schema initialized successfully.");
     } else {
-      console.log("Error: Schema file 'schema.sql' does not exist. Please ensure it is in the correct location.");
+      console.log("⚠️ Error: Schema file 'schema.sql' does not exist. Please ensure it is in the correct location.");
     }
+
+    // Run migration to add missing columns
+    const migrationPath = path.join(__dirname, "../migrations/001_add_profile_columns.js");
+    if (fs.existsSync(migrationPath)) {
+      const { runMigration } = require(migrationPath);
+      await runMigration();
+    }
+
   } catch (error) {
-    console.error("Database initialization failed:", error.message);
+    console.error("❌ Database initialization failed:", error.message);
   }
 }
 

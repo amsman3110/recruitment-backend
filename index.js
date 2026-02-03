@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const pool = require("./src/db"); // ✅ FIX: direct import
+const pool = require("./src/db");
 
 const app = express();
 
@@ -85,13 +85,19 @@ app.post("/auth/login", (_req, res) => {
 });
 
 /* ===============================
-   CANDIDATES: LOAD PROFILE
+   CANDIDATE: LOAD PROFILE
 ================================ */
-app.get("/candidates/me", auth, async (_req, res) => {
+app.get("/candidates/me", auth, async (req, res) => {
   try {
     const r = await pool.query(
-      "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
+      `
+      SELECT *
+      FROM users
+      WHERE id = $1 AND role = 'candidate'
+      `,
+      [req.user.userId]
     );
+
     res.json(r.rows[0] || {});
   } catch (e) {
     console.error("LOAD PROFILE ERROR:", e.message);
@@ -100,7 +106,7 @@ app.get("/candidates/me", auth, async (_req, res) => {
 });
 
 /* ===============================
-   CANDIDATES: SAVE PROFILE
+   CANDIDATE: SAVE PROFILE
 ================================ */
 app.post("/candidates/me", auth, async (req, res) => {
   try {
@@ -115,27 +121,24 @@ app.post("/candidates/me", auth, async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO candidates (
-        name,
-        email,
-        password_hash,
-        current_job_title,
-        specialization,
-        profile_summary,
-        photo_url,
-        cv_url
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      UPDATE users
+      SET
+        name = $1,
+        current_job_title = $2,
+        specialization = $3,
+        profile_summary = $4,
+        photo_url = $5,
+        cv_url = $6
+      WHERE id = $7 AND role = 'candidate'
       `,
       [
         name,
-        "dev@example.com",
-        "dev_password_hash",
         current_job_title,
         specialization,
         profile_summary,
         photo_url,
         cv_url,
+        req.user.userId,
       ]
     );
 

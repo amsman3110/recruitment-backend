@@ -1,151 +1,141 @@
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-
-const pool = require("./src/db");
-const { initDb } = require("./src/db");
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+const { pool } = require("./src/db");
 
 const app = express();
-
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
-/* ===============================
-   INITIALIZE DATABASE
-================================ */
-initDb();
-
-/* ===============================
-   MIDDLEWARE
-================================ */
 app.use(cors());
 app.use(express.json());
-
-// Log every request (VERY IMPORTANT for debugging)
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
 
 /* ===============================
    AUTH MIDDLEWARE
 ================================ */
 function auth(req, res, next) {
   const header = req.headers.authorization;
-
-  if (!header) {
-    return res.status(401).json({ message: "No token" });
-  }
+  if (!header) return res.status(401).json({ message: "No token" });
 
   try {
     const token = header.split(" ")[1];
     req.user = jwt.verify(token, JWT_SECRET);
     next();
-  } catch (error) {
-    console.error("❌ Invalid token", error);
+  } catch {
     return res.status(401).json({ message: "Invalid token" });
   }
 }
 
 /* ===============================
-   HEALTH CHECK
+   STATIC FILES (IMPORTANT)
 ================================ */
-app.get("/", (_req, res) => {
-  res.json({ status: "OK" });
-});
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* ===============================
-   DEV LOGIN
+   MULTER CONFIG
 ================================ */
-app.post("/auth/login", (_req, res) => {
-  const token = jwt.sign({ id: "dev-user" }, JWT_SECRET, {
-    expiresIn: "7d",
-  });
-  res.json({ token });
+const photoStorage = multer.diskStorage({
+  destination: "uploads/photos",
+  filename: (_, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
 });
 
+const cvStorage = multer.diskStorage({
+  destination: "uploads/cv",
+  filename: (_, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+const uploadPhoto = multer({ storage: photoStorage });
+const uploadCV = multer({ storage: cvStorage });
+
 /* ===============================
-   SAVE PROFILE
+   UPLOAD PHOTO
 ================================ */
-app.post("/profile", auth, async (req, res) => {
-  console.log("➡️ POST /profile BODY:", req.body);
-
-  try {
-    const {
-      name,
-      specialization,
-      current_job_title,
-      profile_summary,
-      experience,
-      technical_skills,
-      soft_skills,
-      education,
-      photo_url,
-      cv_url,
-    } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ message: "Name is required" });
+app.post(
+  "/upload/photo",
+  auth,
+  uploadPhoto.single("photo"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
     }
 
-    await pool.query(
-      `
-      INSERT INTO candidates (
-        name,
-        specialization,
-        current_job_title,
-        profile_summary,
-        experience,
-        technical_skills,
-        soft_skills,
-        education,
-        photo_url,
-        cv_url
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      `,
-      [
-        name,
-        specialization || null,
-        current_job_title || null,
-        profile_summary || null,
-        experience || {},
-        technical_skills || [],
-        soft_skills || [],
-        education || {},
-        photo_url || null,
-        cv_url || null,
-      ]
-    );
-
-    console.log("✅ Profile saved successfully");
-    res.json({ success: true });
-  } catch (error) {
-    console.error("❌ SAVE PROFILE ERROR:", error);
-    res.status(500).json({ message: "Save failed" });
+    const photoUrl = `/uploads/photos/${req.file.filename}`;
+    res.json({ photo_url: photoUrl });
   }
-});
+);
 
 /* ===============================
-   LOAD PROFILE
+   UPLOAD CV
+================================ */
+app.post(
+  "/upload/cv",
+  auth,
+  uploadCV.single("cv"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const cvUrl = `/uploads/cv/${req.file.filename}`;
+    res.json({ cv_url: cvUrl });
+  }
+);
+
+/* ===============================
+   PROFILE ROUTES
 ================================ */
 app.get("/profile", auth, async (_req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
-    );
+  const r = await pool.query(
+    "SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1"
+  );
+  res.json(r.rows[0] || {});
+});
 
-    res.json(result.rows[0] || {});
-  } catch (error) {
-    console.error("❌ LOAD PROFILE ERROR:", error);
-    res.status(500).json({ message: "Load failed" });
-  }
+app.post("/profile", auth, async (req, res) => {
+  const {
+    name,
+    current_job_title,
+    specialization,
+    profile_summary,
+    photo_url,
+    cv_url,
+  } = req.body;
+
+  await pool.query(
+    `
+    INSERT INTO candidates (
+      name,
+      current_job_title,
+      specialization,
+      profile_summary,
+      photo_url,
+      cv_url
+    )
+    VALUES ($1,$2,$3,$4,$5,$6)
+    `,
+    [
+      name,
+      current_job_title,
+      specialization,
+      profile_summary,
+      photo_url,
+      cv_url,
+    ]
+  );
+
+  res.json({ success: true });
 });
 
 /* ===============================
-   START SERVER
+   START
 ================================ */
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);

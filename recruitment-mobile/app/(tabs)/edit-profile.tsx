@@ -1,6 +1,11 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,117 +15,133 @@ import {
 } from "react-native";
 import { apiGet, apiPost } from "../services/api";
 
-/* ===============================
-   TYPES
-================================ */
-type Profile = {
-  name?: string;
-  current_job_title?: string;
-  specialization?: string;
-  profile_summary?: string;
-  technical_skills?: string[];
-  soft_skills?: string[];
-  experience?: unknown[];
-  education?: unknown[];
-};
+const BACKEND_URL = "https://recruitment-backend-cm12.onrender.com";
 
 export default function EditProfileScreen() {
-  /* ===============================
-     STATE
-  ================================ */
+  const router = useRouter();
+
   const [name, setName] = useState("");
   const [currentJobTitle, setCurrentJobTitle] = useState("");
   const [specialization, setSpecialization] = useState("");
   const [profileSummary, setProfileSummary] = useState("");
 
-  const [technicalSkillsText, setTechnicalSkillsText] = useState("");
-  const [softSkillsText, setSoftSkillsText] = useState("");
-
-  const [experienceText, setExperienceText] = useState("[]");
-  const [educationText, setEducationText] = useState("[]");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [cvUrl, setCvUrl] = useState<string | null>(null);
+  const [cvName, setCvName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
 
-  /* ===============================
-     LOAD PROFILE
-  ================================ */
   useEffect(() => {
-    async function loadProfile() {
-      try {
-        const profile = (await apiGet("/profile")) as Profile;
-
-        if (profile.name) setName(profile.name);
-        if (profile.current_job_title)
-          setCurrentJobTitle(profile.current_job_title);
-        if (profile.specialization)
-          setSpecialization(profile.specialization);
-        if (profile.profile_summary)
-          setProfileSummary(profile.profile_summary);
-
-        if (Array.isArray(profile.technical_skills)) {
-          setTechnicalSkillsText(profile.technical_skills.join(", "));
-        }
-
-        if (Array.isArray(profile.soft_skills)) {
-          setSoftSkillsText(profile.soft_skills.join(", "));
-        }
-
-        setExperienceText(
-          JSON.stringify(profile.experience || [], null, 2)
-        );
-        setEducationText(
-          JSON.stringify(profile.education || [], null, 2)
-        );
-      } catch {
-        Alert.alert("Error", "Failed to load profile");
-      }
-    }
-
     loadProfile();
   }, []);
 
-  /* ===============================
-     SAVE PROFILE
-  ================================ */
-  async function handleSave() {
-    if (name.trim() === "") {
-      Alert.alert("Validation Error", "Name is required");
+  async function loadProfile() {
+    try {
+      const profile = await apiGet("/profile");
+      setName(profile?.name || "");
+      setCurrentJobTitle(profile?.current_job_title || "");
+      setSpecialization(profile?.specialization || "");
+      setProfileSummary(profile?.profile_summary || "");
+      setPhotoUrl(profile?.photo_url || null);
+      setCvUrl(profile?.cv_url || null);
+    } catch {}
+  }
+
+  async function handlePickPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (result.canceled) return;
+
+    const token = await AsyncStorage.getItem("token");
+    if (!token) {
+      Alert.alert("Error", "Not authenticated");
       return;
     }
 
-    let experience: unknown[];
-    let education: unknown[];
+    const image = result.assets[0];
+    const formData = new FormData();
+
+    formData.append("photo", {
+      uri: image.uri,
+      name: "photo.jpg",
+      type: "image/jpeg",
+    } as any);
 
     try {
-      experience = JSON.parse(experienceText);
-      education = JSON.parse(educationText);
+      setLoading(true);
+      const res = await fetch(`${BACKEND_URL}/upload/photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      setPhotoUrl(data.photo_url);
     } catch {
-      Alert.alert(
-        "Invalid JSON",
-        "Experience or Education JSON is invalid"
-      );
+      Alert.alert("Error", "Photo upload failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePickCV() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "application/pdf",
+    });
+
+    if (result.canceled) return;
+
+    const token = await AsyncStorage.getItem("token");
+    if (!token) {
+      Alert.alert("Error", "Not authenticated");
       return;
     }
 
+    const file = result.assets[0];
+    setCvName(file.name);
+
+    const formData = new FormData();
+    formData.append("cv", {
+      uri: file.uri,
+      name: file.name,
+      type: "application/pdf",
+    } as any);
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${BACKEND_URL}/upload/cv`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      setCvUrl(data.cv_url);
+    } catch {
+      Alert.alert("Error", "CV upload failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave() {
     try {
       setLoading(true);
 
       await apiPost("/profile", {
-        name: name.trim(),
-        current_job_title: currentJobTitle.trim(),
-        specialization: specialization.trim(),
-        profile_summary: profileSummary.trim(),
-        technical_skills: technicalSkillsText.split(",").map((item) =>
-          item.trim()
-        ),
-        soft_skills: softSkillsText.split(",").map((item) =>
-          item.trim()
-        ),
-        experience,
-        education,
+        name,
+        current_job_title: currentJobTitle,
+        specialization,
+        profile_summary: profileSummary,
+        photo_url: photoUrl,
+        cv_url: cvUrl,
       });
 
-      Alert.alert("Success", "Profile saved successfully");
+      Alert.alert("Success", "Profile saved");
+      router.back();
     } catch {
       Alert.alert("Error", "Failed to save profile");
     } finally {
@@ -128,61 +149,52 @@ export default function EditProfileScreen() {
     }
   }
 
-  /* ===============================
-     UI
-  ================================ */
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Edit Profile</Text>
 
-      <Field label="Name *" value={name} onChange={setName} />
-      <Field
+      <TouchableOpacity onPress={handlePickPhoto}>
+        <Image
+          style={styles.avatar}
+          source={
+            photoUrl
+              ? { uri: `${BACKEND_URL}${photoUrl}` }
+              : require("../../assets/images/avatar-placeholder.png")
+          }
+        />
+        <Text style={styles.link}>Change Photo</Text>
+      </TouchableOpacity>
+
+      <Input label="Name" value={name} onChange={setName} />
+      <Input
         label="Current Job Title"
         value={currentJobTitle}
         onChange={setCurrentJobTitle}
       />
-      <Field
+      <Input
         label="Specialization"
         value={specialization}
         onChange={setSpecialization}
       />
-      <Field
+      <Input
         label="Profile Summary"
         value={profileSummary}
         onChange={setProfileSummary}
         multiline
       />
 
-      <Field
-        label="Technical Skills (comma separated)"
-        value={technicalSkillsText}
-        onChange={setTechnicalSkillsText}
-      />
-      <Field
-        label="Soft Skills (comma separated)"
-        value={softSkillsText}
-        onChange={setSoftSkillsText}
-      />
-
-      <Field
-        label="Experience (JSON array)"
-        value={experienceText}
-        onChange={setExperienceText}
-        multiline
-      />
-      <Field
-        label="Education (JSON array)"
-        value={educationText}
-        onChange={setEducationText}
-        multiline
-      />
+      <TouchableOpacity style={styles.uploadBtn} onPress={handlePickCV}>
+        <Text style={styles.uploadText}>
+          {cvName ? `CV: ${cvName}` : "Upload CV (PDF)"}
+        </Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.button}
+        style={styles.saveBtn}
         onPress={handleSave}
         disabled={loading}
       >
-        <Text style={styles.buttonText}>
+        <Text style={styles.saveText}>
           {loading ? "Saving..." : "Save Profile"}
         </Text>
       </TouchableOpacity>
@@ -190,10 +202,12 @@ export default function EditProfileScreen() {
   );
 }
 
-/* ===============================
-   FIELD COMPONENT
-================================ */
-function Field(props: {
+function Input({
+  label,
+  value,
+  onChange,
+  multiline = false,
+}: {
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -201,23 +215,17 @@ function Field(props: {
 }) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={styles.label}>{props.label}</Text>
+      <Text style={styles.label}>{label}</Text>
       <TextInput
-        value={props.value}
-        onChangeText={props.onChange}
-        style={[
-          styles.input,
-          props.multiline ? styles.multiline : null,
-        ]}
-        multiline={props.multiline}
+        value={value}
+        onChangeText={onChange}
+        style={[styles.input, multiline ? styles.multiline : null]}
+        multiline={multiline}
       />
     </View>
   );
 }
 
-/* ===============================
-   STYLES
-================================ */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -230,6 +238,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 20,
   },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignSelf: "center",
+    marginBottom: 8,
+  },
+  link: {
+    color: "#60a5fa",
+    textAlign: "center",
+    marginBottom: 24,
+  },
   label: {
     color: "#cbd5f5",
     marginBottom: 6,
@@ -238,19 +258,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
   },
   multiline: {
-    height: 120,
-    textAlignVertical: "top",
+    height: 100,
   },
-  button: {
+  uploadBtn: {
+    backgroundColor: "#1e293b",
+    padding: 14,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  uploadText: {
+    color: "#fff",
+    textAlign: "center",
+  },
+  saveBtn: {
     backgroundColor: "#2563eb",
     padding: 16,
     borderRadius: 10,
-    marginTop: 24,
   },
-  buttonText: {
+  saveText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "600",

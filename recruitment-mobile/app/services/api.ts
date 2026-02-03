@@ -1,53 +1,40 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 
 const BASE_URL = "https://recruitment-backend-cm12.onrender.com";
 
-const api = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-/* ===============================
-   ATTACH TOKEN
-================================ */
-api.interceptors.request.use(async (config) => {
+async function getHeaders() {
   const token = await AsyncStorage.getItem("token");
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-});
-
-/* ===============================
-   HELPERS
-================================ */
-export async function apiGet(url: string) {
-  try {
-    const res = await api.get(url);
-    return res.data;
-  } catch (error: any) {
-    console.error(
-      "API GET ERROR:",
-      error?.response?.data || error.message
-    );
-    throw error;
-  }
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-export async function apiPost(url: string, data: any) {
-  try {
-    const res = await api.post(url, data);
-    return res.data;
-  } catch (error: any) {
-    console.error(
-      "API POST ERROR:",
-      error?.response?.data || error.message
-    );
-    throw error;
+export async function apiGet(path: string) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: await getHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text);
   }
+
+  return res.json();
+}
+
+export async function apiPost(path: string, body: any) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: await getHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text);
+  }
+
+  return res.json();
 }

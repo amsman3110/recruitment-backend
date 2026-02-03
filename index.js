@@ -151,9 +151,17 @@ app.get("/candidate/profile", auth, async function (req, res) {
 
 app.post("/candidate/update-profile", auth, async function (req, res) {
   try {
+    console.log("=== UPDATE PROFILE DEBUG ===");
+    console.log("User ID:", req.user.userId);
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("photo_url exists:", !!req.body.photo_url);
+    console.log("photo_url length:", req.body.photo_url ? req.body.photo_url.length : 0);
+    console.log("cv_url exists:", !!req.body.cv_url);
+    
     var b = req.body;
-    await pool.query(
-      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, technical_skills = $7, soft_skills = $8, experience = $9, education = $10, courses = $11, certificates = $12, updated_at = NOW() WHERE id = $13",
+    
+    var result = await pool.query(
+      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, technical_skills = $7, soft_skills = $8, experience = $9, education = $10, courses = $11, certificates = $12, updated_at = NOW() WHERE id = $13 RETURNING photo_url, cv_url",
       [
         b.name || null,
         b.jobTitle || b.current_job_title || null,
@@ -170,8 +178,14 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
         req.user.userId,
       ]
     );
+    
+    console.log("Update result - photo_url saved:", result.rows[0].photo_url ? result.rows[0].photo_url.substring(0, 50) : null);
+    console.log("Update result - cv_url saved:", result.rows[0].cv_url ? result.rows[0].cv_url.substring(0, 50) : null);
+    console.log("Profile updated successfully!");
+    
     res.json({ success: true });
   } catch (e) {
+    console.error("Update profile error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });

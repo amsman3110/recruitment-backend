@@ -6,12 +6,19 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
+
 const pool = require("./src/db");
+const { initDb } = require("./src/db");
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+
+/* ===============================
+   INIT DATABASE (CRITICAL)
+================================ */
+initDb();
 
 /* ===============================
    MIDDLEWARE
@@ -80,22 +87,19 @@ app.get("/", (_req, res) => {
    DEV LOGIN
 ================================ */
 app.post("/auth/login", (_req, res) => {
-  const token = jwt.sign({ userId: 1 }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ userId: "dev-user" }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
   res.json({ token });
 });
 
 /* ===============================
-   CANDIDATE: LOAD PROFILE
+   LOAD CANDIDATE PROFILE
 ================================ */
-app.get("/candidates/me", auth, async (req, res) => {
+app.get("/candidates/me", auth, async (_req, res) => {
   try {
     const r = await pool.query(
-      `
-      SELECT *
-      FROM users
-      WHERE id = $1 AND role = 'candidate'
-      `,
-      [req.user.userId]
+      `SELECT * FROM candidates ORDER BY created_at DESC LIMIT 1`
     );
 
     res.json(r.rows[0] || {});
@@ -106,7 +110,7 @@ app.get("/candidates/me", auth, async (req, res) => {
 });
 
 /* ===============================
-   CANDIDATE: SAVE PROFILE
+   SAVE CANDIDATE PROFILE
 ================================ */
 app.post("/candidates/me", auth, async (req, res) => {
   try {
@@ -121,15 +125,15 @@ app.post("/candidates/me", auth, async (req, res) => {
 
     await pool.query(
       `
-      UPDATE users
-      SET
-        name = $1,
-        current_job_title = $2,
-        specialization = $3,
-        profile_summary = $4,
-        photo_url = $5,
-        cv_url = $6
-      WHERE id = $7 AND role = 'candidate'
+      INSERT INTO candidates (
+        name,
+        current_job_title,
+        specialization,
+        profile_summary,
+        photo_url,
+        cv_url
+      )
+      VALUES ($1,$2,$3,$4,$5,$6)
       `,
       [
         name,
@@ -138,7 +142,6 @@ app.post("/candidates/me", auth, async (req, res) => {
         profile_summary,
         photo_url,
         cv_url,
-        req.user.userId,
       ]
     );
 

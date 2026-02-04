@@ -1,353 +1,486 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { apiGet } from "../services/api";
+// v7 - Added CV metadata support (filename, upload date)
+require("dotenv").config();
 
-export default function HomeScreen() {
-  const router = useRouter();
+var express = require("express");
+var cors = require("cors");
+var jwt = require("jsonwebtoken");
+var bcrypt = require("bcrypt");
+var Pool = require("pg").Pool;
 
-  const [userName, setUserName] = useState("");
-  const [applications, setApplications] = useState([]);
-  const [recommendedJobs, setRecommendedJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+var app = express();
+var PORT = process.env.PORT || 3000;
+var JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
-  useEffect(() => {
-    loadData();
-  }, []);
+var pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-  async function loadData() {
-    try {
-      setLoading(true);
+app.use(cors());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-      const profile = await apiGet("/candidate/profile");
-      setUserName(profile.name || "User");
+// Log all requests
+app.use(function(req, res, next) {
+  console.log("📨 Request:", req.method, req.url);
+  console.log("📨 Content-Type:", req.headers['content-type']);
+  console.log("📨 Content-Length:", req.headers['content-length']);
+  next();
+});
 
-      const apps = await apiGet("/applications");
-      setApplications(apps);
-
-      const jobs = await apiGet("/jobs");
-      setRecommendedJobs(jobs.slice(0, 5));
-    } catch (error) {
-      console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-    }
+// Handle JSON parsing errors
+app.use(function(err, req, res, next) {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error("❌ JSON Parse Error:", err.message);
+    return res.status(400).json({ error: "Invalid JSON" });
   }
+  next();
+});
 
-  async function onRefresh() {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+function auth(req, res, next) {
+  var header = req.headers.authorization;
+  if (!header) return res.status(401).json({ message: "No token" });
+  try {
+    var token = header.split(" ")[1];
+    var decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Accept both userId and id (for backwards compatibility)
+    req.user = {
+      userId: decoded.userId || decoded.id,
+      role: decoded.role
+    };
+    
+    console.log("✅ Auth successful - User ID:", req.user.userId);
+    next();
+  } catch (e) {
+    console.error("❌ Auth failed:", e.message);
+    return res.status(401).json({ message: "Invalid token" });
   }
-
-  function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  function getStatusColor(status) {
-    switch (status) {
-      case "applied":
-        return "#007AFF";
-      case "reviewed":
-        return "#FF9500";
-      case "accepted":
-        return "#34C759";
-      case "rejected":
-        return "#FF3B30";
-      default:
-        return "#8E8E93";
-    }
-  }
-
-  function getStatusText(status) {
-    return status.charAt(0).toUpperCase() + status.slice(1);
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Welcome back,</Text>
-        <Text style={styles.userName}>{userName}!</Text>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your Applications</Text>
-          <Text style={styles.sectionCount}>{applications.length}</Text>
-        </View>
-
-        {applications.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>No applications yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start applying to jobs below!
-            </Text>
-          </View>
-        ) : (
-          applications.map((app) => (
-            <Pressable
-              key={app.id}
-              style={styles.applicationCard}
-              onPress={() => router.push(`/job-details?id=${app.job_id}`)}
-            >
-              <View style={styles.applicationHeader}>
-                <View style={styles.applicationInfo}>
-                  <Text style={styles.jobTitle}>{app.job_title}</Text>
-                  {app.job_location && (
-                    <Text style={styles.jobLocation}>
-                      📍 {app.job_location}
-                    </Text>
-                  )}
-                </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(app.status) },
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {getStatusText(app.status)}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.appliedDate}>
-                Applied: {formatDate(app.applied_at)}
-              </Text>
-            </Pressable>
-          ))
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recommended for You</Text>
-        </View>
-
-        {recommendedJobs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>💼</Text>
-            <Text style={styles.emptyText}>No jobs available</Text>
-          </View>
-        ) : (
-          recommendedJobs.map((job) => (
-            <Pressable
-              key={job.id}
-              style={styles.jobCard}
-              onPress={() => router.push(`/job-details?id=${job.id}`)}
-            >
-              <Text style={styles.jobTitle}>{job.title}</Text>
-              {job.company_name && (
-                <Text style={styles.companyName}>{job.company_name}</Text>
-              )}
-              <View style={styles.jobMeta}>
-                {job.location && (
-                  <Text style={styles.jobMetaText}>📍 {job.location}</Text>
-                )}
-                {job.experience_years !== null && (
-                  <Text style={styles.jobMetaText}>
-                    💼 {job.experience_years}+ years
-                  </Text>
-                )}
-              </View>
-            </Pressable>
-          ))
-        )}
-
-        <Pressable
-          style={styles.viewAllButton}
-          onPress={() => router.push("/jobs")}
-        >
-          <Text style={styles.viewAllText}>View All Jobs →</Text>
-        </Pressable>
-      </View>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
-  );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F5F7",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F5F5F7",
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#8E8E93",
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 24,
-    backgroundColor: "#fff",
-  },
-  greeting: {
-    fontSize: 16,
-    color: "#8E8E93",
-  },
-  userName: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#000",
-    marginTop: 4,
-  },
-  section: {
-    marginTop: 24,
-    paddingHorizontal: 20,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#000",
-  },
-  sectionCount: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#8E8E93",
-  },
-  applicationCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  applicationHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  applicationInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  jobTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#000",
-    marginBottom: 4,
-  },
-  jobLocation: {
-    fontSize: 14,
-    color: "#8E8E93",
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  appliedDate: {
-    fontSize: 13,
-    color: "#8E8E93",
-  },
-  jobCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  companyName: {
-    fontSize: 15,
-    color: "#007AFF",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  jobMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  jobMetaText: {
-    fontSize: 14,
-    color: "#8E8E93",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 40,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#000",
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#8E8E93",
-  },
-  viewAllButton: {
-    marginTop: 12,
-    paddingVertical: 14,
-    backgroundColor: "#007AFF",
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  viewAllText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+app.get("/", function (req, res) {
+  res.json({ status: "OK" });
+});
+
+app.get("/run-migration", async function (req, res) {
+  try {
+    await pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
+    await pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())");
+    await pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())");
+    
+    // Add CV metadata columns
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP");
+    
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS education TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER");
+    
+    var c = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash'");
+    if (c.rows.length > 0) {
+      await pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password");
+    }
+    
+    var r = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
+    res.json({ status: "SUCCESS", total_columns: r.rows.length, columns: r.rows.map(function (x) { return x.column_name; }) });
+  } catch (e) {
+    res.status(500).json({ status: "FAILED", error: e.message });
+  }
+});
+
+app.post("/auth/register", async function (req, res) {
+  try {
+    var email = req.body.email;
+    var password = req.body.password;
+    var name = req.body.name;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    var hashedPassword = await bcrypt.hash(password, 10);
+    var result = await pool.query(
+      "INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, 'candidate') RETURNING id, email, role, name",
+      [email, hashedPassword, name || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    if (e.code === "23505") {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/auth/login", async function (req, res) {
+  try {
+    var email = req.body.email;
+    var password = req.body.password;
+
+    if (!email && !password) {
+      var devResult = await pool.query(
+        "INSERT INTO users (email, role) VALUES ('dev@example.com', 'candidate') ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id"
+      );
+      var devToken = jwt.sign({ userId: devResult.rows[0].id }, JWT_SECRET, { expiresIn: "7d" });
+      return res.json({ token: devToken });
+    }
+
+    var result = await pool.query(
+      "SELECT id, email, password, role FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    var user = result.rows[0];
+    var passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    var token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.json({
+      token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/candidate/profile", auth, async function (req, res) {
+  try {
+    var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
+    res.json(r.rows[0] || {});
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/candidate/update-profile", auth, async function (req, res) {
+  try {
+    console.log("=== UPDATE PROFILE DEBUG ===");
+    console.log("User ID:", req.user.userId);
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("photo_url exists:", !!req.body.photo_url);
+    console.log("cv_url exists:", !!req.body.cv_url);
+    console.log("cv_filename:", req.body.cv_filename);
+    
+    var b = req.body;
+    
+    var result = await pool.query(
+      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, cv_filename = $7, cv_uploaded_at = $8, technical_skills = $9, soft_skills = $10, experience = $11, education = $12, courses = $13, certificates = $14, updated_at = NOW() WHERE id = $15 RETURNING photo_url, cv_url, cv_filename, cv_uploaded_at",
+      [
+        b.name || null,
+        b.jobTitle || b.current_job_title || null,
+        b.specialization || null,
+        b.summary || b.profile_summary || null,
+        b.photo_url || null,
+        b.cv_url || null,
+        b.cv_filename || null,
+        b.cv_uploaded_at || null,
+        b.technicalSkills || b.technical_skills || null,
+        b.softSkills || b.soft_skills || null,
+        b.experience || null,
+        b.education || null,
+        b.courses || null,
+        b.certificates || null,
+        req.user.userId,
+      ]
+    );
+    
+    console.log("Query executed, rows returned:", result.rows.length);
+    if (result.rows.length > 0) {
+      console.log("✅ Update successful!");
+      console.log("Photo URL saved:", result.rows[0].photo_url ? "YES" : "NO");
+      console.log("CV URL saved:", result.rows[0].cv_url ? "YES" : "NO");
+      console.log("CV filename saved:", result.rows[0].cv_filename);
+      console.log("CV uploaded at:", result.rows[0].cv_uploaded_at);
+    } else {
+      console.log("⚠️ WARNING: No rows updated! User ID might not exist:", req.user.userId);
+    }
+    
+    res.json({ success: true });
+  } catch (e) {
+    console.error("❌ Update profile error:", e.message);
+    console.error("Stack:", e.stack);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/candidates/me", auth, async function (req, res) {
+  try {
+    var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
+    res.json(r.rows[0] || {});
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/candidates/me", auth, async function (req, res) {
+  try {
+    var b = req.body;
+    await pool.query(
+      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, updated_at = NOW() WHERE id = $7",
+      [b.name, b.current_job_title, b.specialization, b.profile_summary, b.photo_url, b.cv_url, req.user.userId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/candidates/upload/photo", auth, async function (req, res) {
+  try {
+    console.log("=== PHOTO UPLOAD DEBUG ===");
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("photo_base64 exists:", !!req.body.photo_base64);
+    console.log("photo_base64 type:", typeof req.body.photo_base64);
+    console.log("photo_base64 length:", req.body.photo_base64 ? req.body.photo_base64.length : 0);
+    
+    var base64Data = req.body.photo_base64;
+    
+    if (!base64Data) {
+      console.log("ERROR: photo_base64 is missing or empty");
+      return res.status(400).json({ error: "photo_base64 is required" });
+    }
+
+    var dataUrl = base64Data;
+    if (!base64Data.startsWith("data:")) {
+      dataUrl = "data:image/jpeg;base64," + base64Data;
+    }
+
+    console.log("Saving photo to database, length:", dataUrl.length);
+    await pool.query("UPDATE users SET photo_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
+    console.log("Photo saved successfully");
+    
+    res.json({ photo_url: dataUrl });
+  } catch (e) {
+    console.log("Photo upload error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/candidates/upload/cv", auth, async function (req, res) {
+  try {
+    console.log("=== CV UPLOAD DEBUG ===");
+    console.log("Request body keys:", Object.keys(req.body));
+    console.log("cv_base64 exists:", !!req.body.cv_base64);
+    console.log("cv_filename:", req.body.cv_filename);
+    
+    var base64Data = req.body.cv_base64;
+    var filename = req.body.cv_filename || "Resume.pdf";
+    
+    if (!base64Data) {
+      return res.status(400).json({ error: "cv_base64 is required" });
+    }
+
+    var dataUrl = base64Data;
+    if (!base64Data.startsWith("data:")) {
+      dataUrl = "data:application/pdf;base64," + base64Data;
+    }
+
+    console.log("Saving CV to database, length:", dataUrl.length);
+    console.log("Filename:", filename);
+    
+    var uploadedAt = new Date().toISOString();
+    
+    await pool.query(
+      "UPDATE users SET cv_url = $1, cv_filename = $2, cv_uploaded_at = $3 WHERE id = $4",
+      [dataUrl, filename, uploadedAt, req.user.userId]
+    );
+    
+    console.log("CV saved successfully at:", uploadedAt);
+    
+    res.json({ 
+      cv_url: dataUrl,
+      cv_filename: filename,
+      cv_uploaded_at: uploadedAt
+    });
+  } catch (e) {
+    console.log("CV upload error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/jobs", async function (req, res) {
+  try {
+    var queryStr = "SELECT * FROM jobs WHERE 1=1";
+    var values = [];
+
+    if (req.query.location) {
+      values.push(req.query.location);
+      queryStr += " AND location = $" + values.length;
+    }
+
+    if (req.query.min_experience) {
+      values.push(Number(req.query.min_experience));
+      queryStr += " AND experience_years >= $" + values.length;
+    }
+
+    queryStr += " ORDER BY created_at DESC";
+    var result = await pool.query(queryStr, values);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/jobs/:id", async function (req, res) {
+  try {
+    var result = await pool.query("SELECT * FROM jobs WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/jobs", auth, async function (req, res) {
+  try {
+    var b = req.body;
+    if (!b.title) {
+      return res.status(400).json({ error: "Job title is required" });
+    }
+
+    var result = await pool.query(
+      "INSERT INTO jobs (title, description, qualifications, location, company_name, experience_years, posted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      [b.title, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years || null, req.user.userId]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/jobs/:id", auth, async function (req, res) {
+  try {
+    var b = req.body;
+    var result = await pool.query(
+      "UPDATE jobs SET title = COALESCE($1, title), description = COALESCE($2, description), qualifications = COALESCE($3, qualifications), location = COALESCE($4, location), company_name = COALESCE($5, company_name), experience_years = COALESCE($6, experience_years) WHERE id = $7 RETURNING *",
+      [b.title || null, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years !== undefined ? b.experience_years : null, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/jobs/:id", auth, async function (req, res) {
+  try {
+    var result = await pool.query("DELETE FROM jobs WHERE id = $1 RETURNING *", [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    res.json({ message: "Job deleted successfully", job: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/applications", auth, async function (req, res) {
+  try {
+    var jobId = req.body.job_id;
+    if (!jobId) {
+      return res.status(400).json({ error: "job_id is required" });
+    }
+
+    var result = await pool.query(
+      "INSERT INTO applications (user_id, job_id) VALUES ($1, $2) RETURNING *",
+      [req.user.userId, jobId]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    if (e.code === "23505") {
+      return res.status(400).json({ error: "You already applied for this job" });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/applications", auth, async function (req, res) {
+  try {
+    var queryStr = "SELECT a.*, j.title as job_title, j.location as job_location FROM applications a LEFT JOIN jobs j ON a.job_id = j.id WHERE 1=1";
+    var values = [];
+
+    if (req.user.role === "candidate" || !req.user.role) {
+      values.push(req.user.userId);
+      queryStr += " AND a.user_id = $" + values.length;
+    }
+
+    if (req.query.status) {
+      values.push(req.query.status);
+      queryStr += " AND a.status = $" + values.length;
+    }
+
+    queryStr += " ORDER BY a.applied_at DESC";
+    var result = await pool.query(queryStr, values);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/applications/:id/status", auth, async function (req, res) {
+  try {
+    var status = req.body.status;
+    var validStatuses = ["applied", "reviewed", "accepted", "rejected"];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ error: "Invalid status. Must be: applied, reviewed, accepted, rejected" });
+    }
+
+    var result = await pool.query(
+      "UPDATE applications SET status = $1 WHERE id = $2 RETURNING *",
+      [status, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.listen(PORT, function () {
+  console.log("Backend running on port " + PORT);
+
+  pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())")
+  .then(function () { console.log("users table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT"); })
+  .then(function () { console.log("cv_filename column added"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP"); })
+  .then(function () { console.log("cv_uploaded_at column added"); return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); })
+  .then(function () { console.log("jobs table OK"); return pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())"); })
+  .then(function () { console.log("applications table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]"); })
+  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]"); })
+  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT"); })
+  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS education TEXT"); })
+  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT"); })
+  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT"); })
+  .then(function () { return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER"); })
+  .then(function () { return pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash'"); })
+  .then(function (c) { if (c.rows.length > 0) return pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password"); })
+  .then(function () { return pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"); })
+  .then(function (r) { console.log("Migration done! Users table has " + r.rows.length + " columns"); })
+  .catch(function (e) { console.log("Migration error: " + e.message); });
 });

@@ -1,4 +1,4 @@
-// v6 - Fixed JWT auth to accept both userId and id
+// v7 - Added CV metadata support (filename, upload date)
 require("dotenv").config();
 
 var express = require("express");
@@ -64,6 +64,11 @@ app.get("/run-migration", async function (req, res) {
     await pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
     await pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())");
     await pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())");
+    
+    // Add CV metadata columns
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP");
+    
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT");
@@ -71,10 +76,12 @@ app.get("/run-migration", async function (req, res) {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT");
     await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER");
+    
     var c = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash'");
     if (c.rows.length > 0) {
       await pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password");
     }
+    
     var r = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
     res.json({ status: "SUCCESS", total_columns: r.rows.length, columns: r.rows.map(function (x) { return x.column_name; }) });
   } catch (e) {
@@ -165,13 +172,13 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
     console.log("User ID:", req.user.userId);
     console.log("Request body keys:", Object.keys(req.body));
     console.log("photo_url exists:", !!req.body.photo_url);
-    console.log("photo_url length:", req.body.photo_url ? req.body.photo_url.length : 0);
     console.log("cv_url exists:", !!req.body.cv_url);
+    console.log("cv_filename:", req.body.cv_filename);
     
     var b = req.body;
     
     var result = await pool.query(
-      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, technical_skills = $7, soft_skills = $8, experience = $9, education = $10, courses = $11, certificates = $12, updated_at = NOW() WHERE id = $13 RETURNING photo_url, cv_url",
+      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, cv_filename = $7, cv_uploaded_at = $8, technical_skills = $9, soft_skills = $10, experience = $11, education = $12, courses = $13, certificates = $14, updated_at = NOW() WHERE id = $15 RETURNING photo_url, cv_url, cv_filename, cv_uploaded_at",
       [
         b.name || null,
         b.jobTitle || b.current_job_title || null,
@@ -179,6 +186,8 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
         b.summary || b.profile_summary || null,
         b.photo_url || null,
         b.cv_url || null,
+        b.cv_filename || null,
+        b.cv_uploaded_at || null,
         b.technicalSkills || b.technical_skills || null,
         b.softSkills || b.soft_skills || null,
         b.experience || null,
@@ -192,8 +201,10 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
     console.log("Query executed, rows returned:", result.rows.length);
     if (result.rows.length > 0) {
       console.log("✅ Update successful!");
-      console.log("Photo URL saved:", result.rows[0].photo_url ? result.rows[0].photo_url.substring(0, 50) + '...' : null);
-      console.log("CV URL saved:", result.rows[0].cv_url ? result.rows[0].cv_url.substring(0, 50) + '...' : null);
+      console.log("Photo URL saved:", result.rows[0].photo_url ? "YES" : "NO");
+      console.log("CV URL saved:", result.rows[0].cv_url ? "YES" : "NO");
+      console.log("CV filename saved:", result.rows[0].cv_filename);
+      console.log("CV uploaded at:", result.rows[0].cv_uploaded_at);
     } else {
       console.log("⚠️ WARNING: No rows updated! User ID might not exist:", req.user.userId);
     }
@@ -264,8 +275,10 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
     console.log("=== CV UPLOAD DEBUG ===");
     console.log("Request body keys:", Object.keys(req.body));
     console.log("cv_base64 exists:", !!req.body.cv_base64);
+    console.log("cv_filename:", req.body.cv_filename);
     
     var base64Data = req.body.cv_base64;
+    var filename = req.body.cv_filename || "Resume.pdf";
     
     if (!base64Data) {
       return res.status(400).json({ error: "cv_base64 is required" });
@@ -276,9 +289,25 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
       dataUrl = "data:application/pdf;base64," + base64Data;
     }
 
-    await pool.query("UPDATE users SET cv_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
-    res.json({ cv_url: dataUrl });
+    console.log("Saving CV to database, length:", dataUrl.length);
+    console.log("Filename:", filename);
+    
+    var uploadedAt = new Date().toISOString();
+    
+    await pool.query(
+      "UPDATE users SET cv_url = $1, cv_filename = $2, cv_uploaded_at = $3 WHERE id = $4",
+      [dataUrl, filename, uploadedAt, req.user.userId]
+    );
+    
+    console.log("CV saved successfully at:", uploadedAt);
+    
+    res.json({ 
+      cv_url: dataUrl,
+      cv_filename: filename,
+      cv_uploaded_at: uploadedAt
+    });
   } catch (e) {
+    console.log("CV upload error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -438,7 +467,9 @@ app.listen(PORT, function () {
   console.log("Backend running on port " + PORT);
 
   pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())")
-  .then(function () { console.log("users table OK"); return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); })
+  .then(function () { console.log("users table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT"); })
+  .then(function () { console.log("cv_filename column added"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP"); })
+  .then(function () { console.log("cv_uploaded_at column added"); return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); })
   .then(function () { console.log("jobs table OK"); return pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())"); })
   .then(function () { console.log("applications table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]"); })
   .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]"); })

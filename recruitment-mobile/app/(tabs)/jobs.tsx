@@ -92,7 +92,8 @@ export default function JobsScreen() {
     fetchJobs();
   }
 
-  function handleClearFilters() {
+  async function handleClearFilters() {
+    // Clear all filter states
     setSelectedWorkplace("");
     setSelectedCountry("");
     setSelectedCity("");
@@ -101,6 +102,17 @@ export default function JobsScreen() {
     setSelectedJobType("");
     setSelectedDatePosted("");
     setSearchText("");
+    
+    // Fetch all jobs without any filters
+    try {
+      setLoading(true);
+      const data = await apiGet("/jobs");
+      setJobs(data);
+    } catch (err) {
+      console.error("Error fetching jobs:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function getActiveFiltersCount() {

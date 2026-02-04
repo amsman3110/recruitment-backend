@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -26,6 +27,10 @@ export default function CandidateProfileScreen() {
   );
 
   async function loadProfile() {
+    // LOG TOKEN FOR DEBUGGING
+    const token = await AsyncStorage.getItem("token");
+    console.log("🔑 YOUR TOKEN:", token);
+    
     setLoading(true);
     try {
       const data = await apiGet("/candidate/profile");
@@ -65,7 +70,6 @@ export default function CandidateProfileScreen() {
 
   const base64ToFile = async (base64String: string, filename: string) => {
     try {
-      // Use the LEGACY API which still works
       const FS = require('expo-file-system/legacy');
       
       console.log("=== CONVERTING BASE64 TO FILE ===");

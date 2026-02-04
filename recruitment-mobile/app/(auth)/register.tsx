@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import api from "../services/api";
+import { apiPost } from "../services/api";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -20,6 +20,10 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
+    console.log("=== REGISTER START ===");
+    console.log("Name:", fullName);
+    console.log("Email:", email);
+    
     if (!fullName || !email || !password || !confirmPassword) {
       Alert.alert("Error", "All fields are required");
       return;
@@ -32,12 +36,15 @@ export default function RegisterScreen() {
 
     try {
       setLoading(true);
+      console.log("Sending registration request...");
 
-      await api.post("/auth/register", {
+      const response = await apiPost("/auth/register", {
         name: fullName,
         email: email,
         password: password,
       });
+
+      console.log("✅ Registration successful:", response);
 
       Alert.alert(
         "Success",
@@ -46,17 +53,18 @@ export default function RegisterScreen() {
           {
             text: "OK",
             onPress: () => {
-              // ✅ Redirect to Login screen after success
               router.replace("/(auth)/login");
             },
           },
         ]
       );
-    } catch (error: any) {
+    } catch (error) {
+      console.error("❌ Registration error:", error);
+      
       const message =
-        error?.response?.data?.message ||
+        (error instanceof Error && error.message) ||
+        (typeof error === "string" && error) ||
         "Registration failed. Please try again.";
-
       Alert.alert("Error", message);
     } finally {
       setLoading(false);
@@ -113,6 +121,15 @@ export default function RegisterScreen() {
           {loading ? "Registering..." : "Register"}
         </Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.linkButton}
+        onPress={() => router.push("/(auth)/login")}
+      >
+        <Text style={styles.linkText}>
+          Already have an account? Login
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -122,6 +139,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     justifyContent: "center",
+    backgroundColor: "#121212",
   },
   title: {
     fontSize: 28,
@@ -150,6 +168,15 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 18,
     fontWeight: "600",
+    textAlign: "center",
+  },
+  linkButton: {
+    marginTop: 16,
+    padding: 8,
+  },
+  linkText: {
+    color: "#007AFF",
+    fontSize: 16,
     textAlign: "center",
   },
 });

@@ -1,4 +1,4 @@
-// v4 - Base64 uploads with logging
+// v5 - Fixed update-profile with better error handling
 require("dotenv").config();
 
 var express = require("express");
@@ -33,14 +33,17 @@ app.use(function(err, req, res, next) {
   }
   next();
 });
+
 function auth(req, res, next) {
   var header = req.headers.authorization;
   if (!header) return res.status(401).json({ message: "No token" });
   try {
     var token = header.split(" ")[1];
     req.user = jwt.verify(token, JWT_SECRET);
+    console.log("✅ Auth successful - User ID:", req.user.userId);
     next();
   } catch (e) {
+    console.error("❌ Auth failed:", e.message);
     return res.status(401).json({ message: "Invalid token" });
   }
 }
@@ -152,6 +155,7 @@ app.get("/candidate/profile", auth, async function (req, res) {
 app.post("/candidate/update-profile", auth, async function (req, res) {
   try {
     console.log("=== UPDATE PROFILE DEBUG ===");
+    console.log("User from auth:", req.user);
     console.log("User ID:", req.user.userId);
     console.log("Request body keys:", Object.keys(req.body));
     console.log("photo_url exists:", !!req.body.photo_url);
@@ -179,13 +183,19 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
       ]
     );
     
-    console.log("Update result - photo_url saved:", result.rows[0].photo_url ? result.rows[0].photo_url.substring(0, 50) : null);
-    console.log("Update result - cv_url saved:", result.rows[0].cv_url ? result.rows[0].cv_url.substring(0, 50) : null);
+    console.log("Query executed, rows returned:", result.rows.length);
+    if (result.rows.length > 0) {
+      console.log("Update result - photo_url saved:", result.rows[0].photo_url ? result.rows[0].photo_url.substring(0, 50) : null);
+      console.log("Update result - cv_url saved:", result.rows[0].cv_url ? result.rows[0].cv_url.substring(0, 50) : null);
+    } else {
+      console.log("⚠️ WARNING: No rows updated! User ID might not exist:", req.user.userId);
+    }
     console.log("Profile updated successfully!");
     
     res.json({ success: true });
   } catch (e) {
     console.error("Update profile error:", e.message);
+    console.error("Stack:", e.stack);
     res.status(500).json({ error: e.message });
   }
 });

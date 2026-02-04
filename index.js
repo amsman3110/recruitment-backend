@@ -1,4 +1,4 @@
-// v7 - Added CV metadata support (filename, upload date)
+// v8 - Added job filters support
 require("dotenv").config();
 
 var express = require("express");
@@ -20,8 +20,6 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // Log all requests
 app.use(function(req, res, next) {
   console.log("📨 Request:", req.method, req.url);
-  console.log("📨 Content-Type:", req.headers['content-type']);
-  console.log("📨 Content-Length:", req.headers['content-length']);
   next();
 });
 
@@ -41,13 +39,11 @@ function auth(req, res, next) {
     var token = header.split(" ")[1];
     var decoded = jwt.verify(token, JWT_SECRET);
     
-    // Accept both userId and id (for backwards compatibility)
     req.user = {
       userId: decoded.userId || decoded.id,
       role: decoded.role
     };
     
-    console.log("✅ Auth successful - User ID:", req.user.userId);
     next();
   } catch (e) {
     console.error("❌ Auth failed:", e.message);
@@ -57,36 +53,6 @@ function auth(req, res, next) {
 
 app.get("/", function (req, res) {
   res.json({ status: "OK" });
-});
-
-app.get("/run-migration", async function (req, res) {
-  try {
-    await pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
-    await pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())");
-    await pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())");
-    
-    // Add CV metadata columns
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP");
-    
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS education TEXT");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT");
-    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT");
-    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER");
-    
-    var c = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash'");
-    if (c.rows.length > 0) {
-      await pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password");
-    }
-    
-    var r = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
-    res.json({ status: "SUCCESS", total_columns: r.rows.length, columns: r.rows.map(function (x) { return x.column_name; }) });
-  } catch (e) {
-    res.status(500).json({ status: "FAILED", error: e.message });
-  }
 });
 
 app.post("/auth/register", async function (req, res) {
@@ -168,17 +134,10 @@ app.get("/candidate/profile", auth, async function (req, res) {
 
 app.post("/candidate/update-profile", auth, async function (req, res) {
   try {
-    console.log("=== UPDATE PROFILE DEBUG ===");
-    console.log("User ID:", req.user.userId);
-    console.log("Request body keys:", Object.keys(req.body));
-    console.log("photo_url exists:", !!req.body.photo_url);
-    console.log("cv_url exists:", !!req.body.cv_url);
-    console.log("cv_filename:", req.body.cv_filename);
-    
     var b = req.body;
     
     var result = await pool.query(
-      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, cv_filename = $7, cv_uploaded_at = $8, technical_skills = $9, soft_skills = $10, experience = $11, education = $12, courses = $13, certificates = $14, updated_at = NOW() WHERE id = $15 RETURNING photo_url, cv_url, cv_filename, cv_uploaded_at",
+      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, cv_filename = $7, cv_uploaded_at = $8, technical_skills = $9, soft_skills = $10, experience = $11, education = $12, courses = $13, certificates = $14, updated_at = NOW() WHERE id = $15 RETURNING *",
       [
         b.name || null,
         b.jobTitle || b.current_job_title || null,
@@ -198,59 +157,18 @@ app.post("/candidate/update-profile", auth, async function (req, res) {
       ]
     );
     
-    console.log("Query executed, rows returned:", result.rows.length);
-    if (result.rows.length > 0) {
-      console.log("✅ Update successful!");
-      console.log("Photo URL saved:", result.rows[0].photo_url ? "YES" : "NO");
-      console.log("CV URL saved:", result.rows[0].cv_url ? "YES" : "NO");
-      console.log("CV filename saved:", result.rows[0].cv_filename);
-      console.log("CV uploaded at:", result.rows[0].cv_uploaded_at);
-    } else {
-      console.log("⚠️ WARNING: No rows updated! User ID might not exist:", req.user.userId);
-    }
-    
     res.json({ success: true });
   } catch (e) {
     console.error("❌ Update profile error:", e.message);
-    console.error("Stack:", e.stack);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/candidates/me", auth, async function (req, res) {
-  try {
-    var r = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.userId]);
-    res.json(r.rows[0] || {});
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/candidates/me", auth, async function (req, res) {
-  try {
-    var b = req.body;
-    await pool.query(
-      "UPDATE users SET name = $1, current_job_title = $2, specialization = $3, profile_summary = $4, photo_url = $5, cv_url = $6, updated_at = NOW() WHERE id = $7",
-      [b.name, b.current_job_title, b.specialization, b.profile_summary, b.photo_url, b.cv_url, req.user.userId]
-    );
-    res.json({ success: true });
-  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 app.post("/candidates/upload/photo", auth, async function (req, res) {
   try {
-    console.log("=== PHOTO UPLOAD DEBUG ===");
-    console.log("Request body keys:", Object.keys(req.body));
-    console.log("photo_base64 exists:", !!req.body.photo_base64);
-    console.log("photo_base64 type:", typeof req.body.photo_base64);
-    console.log("photo_base64 length:", req.body.photo_base64 ? req.body.photo_base64.length : 0);
-    
     var base64Data = req.body.photo_base64;
     
     if (!base64Data) {
-      console.log("ERROR: photo_base64 is missing or empty");
       return res.status(400).json({ error: "photo_base64 is required" });
     }
 
@@ -259,24 +177,16 @@ app.post("/candidates/upload/photo", auth, async function (req, res) {
       dataUrl = "data:image/jpeg;base64," + base64Data;
     }
 
-    console.log("Saving photo to database, length:", dataUrl.length);
     await pool.query("UPDATE users SET photo_url = $1 WHERE id = $2", [dataUrl, req.user.userId]);
-    console.log("Photo saved successfully");
     
     res.json({ photo_url: dataUrl });
   } catch (e) {
-    console.log("Photo upload error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
 app.post("/candidates/upload/cv", auth, async function (req, res) {
   try {
-    console.log("=== CV UPLOAD DEBUG ===");
-    console.log("Request body keys:", Object.keys(req.body));
-    console.log("cv_base64 exists:", !!req.body.cv_base64);
-    console.log("cv_filename:", req.body.cv_filename);
-    
     var base64Data = req.body.cv_base64;
     var filename = req.body.cv_filename || "Resume.pdf";
     
@@ -289,9 +199,6 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
       dataUrl = "data:application/pdf;base64," + base64Data;
     }
 
-    console.log("Saving CV to database, length:", dataUrl.length);
-    console.log("Filename:", filename);
-    
     var uploadedAt = new Date().toISOString();
     
     await pool.query(
@@ -299,38 +206,94 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
       [dataUrl, filename, uploadedAt, req.user.userId]
     );
     
-    console.log("CV saved successfully at:", uploadedAt);
-    
     res.json({ 
       cv_url: dataUrl,
       cv_filename: filename,
       cv_uploaded_at: uploadedAt
     });
   } catch (e) {
-    console.log("CV upload error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
+// UPDATED: Jobs endpoint with filters
 app.get("/jobs", async function (req, res) {
   try {
     var queryStr = "SELECT * FROM jobs WHERE 1=1";
     var values = [];
+    var paramIndex = 1;
 
-    if (req.query.location) {
-      values.push(req.query.location);
-      queryStr += " AND location = $" + values.length;
+    // Workplace filter
+    if (req.query.workplace) {
+      values.push(req.query.workplace);
+      queryStr += " AND workplace = $" + paramIndex++;
     }
 
+    // Country filter
+    if (req.query.country) {
+      values.push(req.query.country);
+      queryStr += " AND country = $" + paramIndex++;
+    }
+
+    // City filter
+    if (req.query.city) {
+      values.push(req.query.city);
+      queryStr += " AND city = $" + paramIndex++;
+    }
+
+    // Career level filter
+    if (req.query.career_level) {
+      values.push(req.query.career_level);
+      queryStr += " AND career_level = $" + paramIndex++;
+    }
+
+    // Job category filter
+    if (req.query.job_category) {
+      values.push(req.query.job_category);
+      queryStr += " AND job_category = $" + paramIndex++;
+    }
+
+    // Job type filter
+    if (req.query.job_type) {
+      values.push(req.query.job_type);
+      queryStr += " AND job_type = $" + paramIndex++;
+    }
+
+    // Experience years filter
     if (req.query.min_experience) {
       values.push(Number(req.query.min_experience));
-      queryStr += " AND experience_years >= $" + values.length;
+      queryStr += " AND experience_years >= $" + paramIndex++;
+    }
+
+    // Date posted filter
+    if (req.query.date_posted) {
+      var daysAgo = 0;
+      if (req.query.date_posted === "today") daysAgo = 1;
+      else if (req.query.date_posted === "week") daysAgo = 7;
+      else if (req.query.date_posted === "2weeks") daysAgo = 14;
+      else if (req.query.date_posted === "month") daysAgo = 30;
+      
+      if (daysAgo > 0) {
+        queryStr += " AND created_at >= NOW() - INTERVAL '" + daysAgo + " days'";
+      }
+    }
+
+    // Search by title or description
+    if (req.query.search) {
+      values.push("%" + req.query.search + "%");
+      queryStr += " AND (title ILIKE $" + paramIndex + " OR description ILIKE $" + paramIndex + ")";
+      paramIndex++;
     }
 
     queryStr += " ORDER BY created_at DESC";
+    
+    console.log("Job search query:", queryStr);
+    console.log("Query values:", values);
+    
     var result = await pool.query(queryStr, values);
     res.json(result.rows);
   } catch (e) {
+    console.error("Job search error:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -355,41 +318,25 @@ app.post("/jobs", auth, async function (req, res) {
     }
 
     var result = await pool.query(
-      "INSERT INTO jobs (title, description, qualifications, location, company_name, experience_years, posted_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-      [b.title, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years || null, req.user.userId]
+      "INSERT INTO jobs (title, description, qualifications, location, company_name, experience_years, workplace, country, city, career_level, job_category, job_type, posted_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
+      [
+        b.title, 
+        b.description || null, 
+        b.qualifications || null, 
+        b.location || null, 
+        b.company_name || null, 
+        b.experience_years || null,
+        b.workplace || null,
+        b.country || null,
+        b.city || null,
+        b.career_level || null,
+        b.job_category || null,
+        b.job_type || null,
+        req.user.userId
+      ]
     );
 
     res.status(201).json(result.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.put("/jobs/:id", auth, async function (req, res) {
-  try {
-    var b = req.body;
-    var result = await pool.query(
-      "UPDATE jobs SET title = COALESCE($1, title), description = COALESCE($2, description), qualifications = COALESCE($3, qualifications), location = COALESCE($4, location), company_name = COALESCE($5, company_name), experience_years = COALESCE($6, experience_years) WHERE id = $7 RETURNING *",
-      [b.title || null, b.description || null, b.qualifications || null, b.location || null, b.company_name || null, b.experience_years !== undefined ? b.experience_years : null, req.params.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.delete("/jobs/:id", auth, async function (req, res) {
-  try {
-    var result = await pool.query("DELETE FROM jobs WHERE id = $1 RETURNING *", [req.params.id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-    res.json({ message: "Job deleted successfully", job: result.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -439,48 +386,57 @@ app.get("/applications", auth, async function (req, res) {
   }
 });
 
-app.put("/applications/:id/status", auth, async function (req, res) {
-  try {
-    var status = req.body.status;
-    var validStatuses = ["applied", "reviewed", "accepted", "rejected"];
-
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({ error: "Invalid status. Must be: applied, reviewed, accepted, rejected" });
-    }
-
-    var result = await pool.query(
-      "UPDATE applications SET status = $1 WHERE id = $2 RETURNING *",
-      [status, req.params.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Application not found" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.listen(PORT, function () {
   console.log("Backend running on port " + PORT);
 
+  // Auto-migration on startup
   pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())")
-  .then(function () { console.log("users table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT"); })
-  .then(function () { console.log("cv_filename column added"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP"); })
-  .then(function () { console.log("cv_uploaded_at column added"); return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); })
-  .then(function () { console.log("jobs table OK"); return pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())"); })
-  .then(function () { console.log("applications table OK"); return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS technical_skills TEXT[]"); })
-  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS soft_skills TEXT[]"); })
-  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS experience TEXT"); })
-  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS education TEXT"); })
-  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS courses TEXT"); })
-  .then(function () { return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS certificates TEXT"); })
-  .then(function () { return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER"); })
-  .then(function () { return pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash'"); })
-  .then(function (c) { if (c.rows.length > 0) return pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password"); })
-  .then(function () { return pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"); })
-  .then(function (r) { console.log("Migration done! Users table has " + r.rows.length + " columns"); })
-  .catch(function (e) { console.log("Migration error: " + e.message); });
+  .then(function () { 
+    console.log("✅ users table OK"); 
+    return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_filename TEXT"); 
+  })
+  .then(function () { 
+    console.log("✅ cv_filename column added"); 
+    return pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_uploaded_at TIMESTAMP"); 
+  })
+  .then(function () { 
+    console.log("✅ cv_uploaded_at column added"); 
+    return pool.query("CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, qualifications TEXT, location TEXT, company_name TEXT, experience_years INTEGER, posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT NOW())"); 
+  })
+  .then(function () { 
+    console.log("✅ jobs table OK"); 
+    // Add new filter columns
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS workplace TEXT");
+  })
+  .then(function () { 
+    console.log("✅ workplace column added"); 
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS country TEXT");
+  })
+  .then(function () { 
+    console.log("✅ country column added"); 
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS city TEXT");
+  })
+  .then(function () { 
+    console.log("✅ city column added"); 
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS career_level TEXT");
+  })
+  .then(function () { 
+    console.log("✅ career_level column added"); 
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_category TEXT");
+  })
+  .then(function () { 
+    console.log("✅ job_category column added"); 
+    return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_type TEXT");
+  })
+  .then(function () { 
+    console.log("✅ job_type column added"); 
+    return pool.query("CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE, status TEXT DEFAULT 'applied', applied_at TIMESTAMP DEFAULT NOW())"); 
+  })
+  .then(function () { 
+    console.log("✅ applications table OK"); 
+    console.log("🎉 All migrations complete!");
+  })
+  .catch(function (e) { 
+    console.log("❌ Migration error: " + e.message); 
+  });
 });

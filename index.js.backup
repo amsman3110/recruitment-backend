@@ -1,4 +1,4 @@
-// v9 - Added AI Career Coach with Google Gemini
+// v8 - Added job filters support
 require("dotenv").config();
 
 var express = require("express");
@@ -6,14 +6,12 @@ var cors = require("cors");
 var jwt = require("jsonwebtoken");
 var bcrypt = require("bcrypt");
 var Pool = require("pg").Pool;
-var { GoogleGenerativeAI } = require("@google/generative-ai");
 
 var app = express();
 var PORT = process.env.PORT || 3000;
 var JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
 var pool = new Pool({ connectionString: process.env.DATABASE_URL });
-var genAI = new GoogleGenerativeAI("AIzaSyD_3hcpX_IQRzcmy3vwGb9_ooR4Wiaa8SA");
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
@@ -54,7 +52,7 @@ function auth(req, res, next) {
 }
 
 app.get("/", function (req, res) {
-  res.json({ status: "OK", version: "v9-with-ai" });
+  res.json({ status: "OK" });
 });
 
 app.post("/auth/register", async function (req, res) {
@@ -218,47 +216,56 @@ app.post("/candidates/upload/cv", auth, async function (req, res) {
   }
 });
 
+// UPDATED: Jobs endpoint with filters
 app.get("/jobs", async function (req, res) {
   try {
     var queryStr = "SELECT * FROM jobs WHERE 1=1";
     var values = [];
     var paramIndex = 1;
 
+    // Workplace filter
     if (req.query.workplace) {
       values.push(req.query.workplace);
       queryStr += " AND workplace = $" + paramIndex++;
     }
 
+    // Country filter
     if (req.query.country) {
       values.push(req.query.country);
       queryStr += " AND country = $" + paramIndex++;
     }
 
+    // City filter
     if (req.query.city) {
       values.push(req.query.city);
       queryStr += " AND city = $" + paramIndex++;
     }
 
+    // Career level filter
     if (req.query.career_level) {
       values.push(req.query.career_level);
       queryStr += " AND career_level = $" + paramIndex++;
     }
 
+    // Job category filter
     if (req.query.job_category) {
       values.push(req.query.job_category);
       queryStr += " AND job_category = $" + paramIndex++;
     }
 
+    // Job type filter
     if (req.query.job_type) {
       values.push(req.query.job_type);
       queryStr += " AND job_type = $" + paramIndex++;
     }
 
+    // Experience years filter
     if (req.query.min_experience) {
       values.push(Number(req.query.min_experience));
       queryStr += " AND experience_years >= $" + paramIndex++;
     }
 
+    // Date posted filter
     if (req.query.date_posted) {
       var daysAgo = 0;
       if (req.query.date_posted === "today") daysAgo = 1;
@@ -271,6 +278,7 @@ app.get("/jobs", async function (req, res) {
       }
     }
 
+    // Search by title or description
     if (req.query.search) {
       values.push("%" + req.query.search + "%");
       queryStr += " AND (title ILIKE $" + paramIndex + " OR description ILIKE $" + paramIndex + ")";
@@ -378,163 +386,10 @@ app.get("/applications", auth, async function (req, res) {
   }
 });
 
-// ========================================
-// AI CAREER COACH ENDPOINTS
-// ========================================
-
-app.post("/ai/analyze-profile", auth, async function (req, res) {
-  try {
-    var userId = req.user.userId;
-    
-    var profileResult = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
-    var profile = profileResult.rows[0];
-
-    if (!profile) {
-      return res.status(404).json({ error: "Profile not found" });
-    }
-
-    var profileData = {
-      name: profile.name || "Not provided",
-      jobTitle: profile.current_job_title || "Not provided",
-      specialization: profile.specialization || "Not provided",
-      summary: profile.profile_summary || "Not provided",
-      technicalSkills: profile.technical_skills || [],
-      softSkills: profile.soft_skills || [],
-      experience: profile.experience || "Not provided",
-      education: profile.education || "Not provided",
-      hasPhoto: !!profile.photo_url,
-      hasCV: !!profile.cv_url,
-    };
-
-    var completeness = 0;
-    if (profile.name) completeness += 10;
-    if (profile.current_job_title) completeness += 10;
-    if (profile.specialization) completeness += 10;
-    if (profile.profile_summary) completeness += 15;
-    if (profile.technical_skills && profile.technical_skills.length > 0) completeness += 15;
-    if (profile.soft_skills && profile.soft_skills.length > 0) completeness += 10;
-    if (profile.experience) completeness += 10;
-    if (profile.education) completeness += 10;
-    if (profile.photo_url) completeness += 5;
-    if (profile.cv_url) completeness += 5;
-
-    var prompt = "You are a professional career coach. Analyze this job seeker's profile and provide specific, actionable advice.\n\nProfile Data:\n- Name: " + profileData.name + "\n- Current Job Title: " + profileData.jobTitle + "\n- Specialization: " + profileData.specialization + "\n- Summary: " + profileData.summary + "\n- Technical Skills: " + (profileData.technicalSkills.join(", ") || "None listed") + "\n- Soft Skills: " + (profileData.softSkills.join(", ") || "None listed") + "\n- Experience: " + profileData.experience + "\n- Education: " + profileData.education + "\n- Has Profile Photo: " + (profileData.hasPhoto ? "Yes" : "No") + "\n- Has CV Uploaded: " + (profileData.hasCV ? "Yes" : "No") + "\n\nProvide a brief analysis (max 200 words) with:\n1. Overall assessment\n2. 3 specific strengths\n3. 3 areas to improve\n4. 2 actionable next steps\n\nBe encouraging but honest.";
-
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    var result = await model.generateContent(prompt);
-    var response = await result.response;
-    var analysis = response.text();
-
-    res.json({
-      completeness: completeness,
-      analysis: analysis,
-      profileData: profileData,
-    });
-  } catch (error) {
-    console.error("AI Profile Analysis Error:", error);
-    res.status(500).json({ error: "Failed to analyze profile" });
-  }
-});
-
-app.post("/ai/analyze-cv", auth, async function (req, res) {
-  try {
-    var userId = req.user.userId;
-    
-    var profileResult = await pool.query("SELECT cv_url, cv_filename, current_job_title FROM users WHERE id = $1", [userId]);
-    var profile = profileResult.rows[0];
-
-    if (!profile || !profile.cv_url) {
-      return res.status(404).json({ error: "No CV uploaded" });
-    }
-
-    var prompt = "You are an expert CV reviewer. Provide advice for a " + (profile.current_job_title || "job seeker") + "'s CV.\n\nGive specific tips on:\n1. CV Structure and Format (3 tips)\n2. Content and Keywords (3 tips)\n3. Common mistakes to avoid (3 tips)\n4. How to stand out (2 tips)\n\nKeep it practical and actionable. Max 250 words.";
-
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    var result = await model.generateContent(prompt);
-    var response = await result.response;
-    var analysis = response.text();
-
-    res.json({
-      cvFilename: profile.cv_filename,
-      analysis: analysis,
-    });
-  } catch (error) {
-    console.error("AI CV Analysis Error:", error);
-    res.status(500).json({ error: "Failed to analyze CV" });
-  }
-});
-
-app.post("/ai/interview-prep", auth, async function (req, res) {
-  try {
-    var userId = req.user.userId;
-    var jobTitle = req.body.jobTitle;
-    
-    var profileResult = await pool.query("SELECT current_job_title, specialization FROM users WHERE id = $1", [userId]);
-    var profile = profileResult.rows[0];
-
-    var targetRole = jobTitle || profile.current_job_title || "your target role";
-
-    var prompt = "You are an interview coach. Generate interview preparation tips for someone applying for: " + targetRole + "\n\nProvide:\n1. 5 common interview questions for this role (with brief answer guidance)\n2. 3 behavioral questions (STAR method tips)\n3. 3 questions the candidate should ask the interviewer\n4. 2 key preparation tips\n\nBe specific to the role. Max 300 words.";
-
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    var result = await model.generateContent(prompt);
-    var response = await result.response;
-    var advice = response.text();
-
-    res.json({
-      targetRole: targetRole,
-      advice: advice,
-    });
-  } catch (error) {
-    console.error("AI Interview Prep Error:", error);
-    res.status(500).json({ error: "Failed to generate interview prep" });
-  }
-});
-
-app.post("/ai/job-tips", auth, async function (req, res) {
-  try {
-    var jobId = req.body.jobId;
-    var userId = req.user.userId;
-
-    if (!jobId) {
-      return res.status(400).json({ error: "Job ID required" });
-    }
-
-    var jobResult = await pool.query("SELECT title, description, qualifications FROM jobs WHERE id = $1", [jobId]);
-    var job = jobResult.rows[0];
-
-    if (!job) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    var profileResult = await pool.query("SELECT current_job_title, specialization, technical_skills FROM users WHERE id = $1", [userId]);
-    var profile = profileResult.rows[0];
-
-    var prompt = "You are a job application coach. Help a candidate apply for this job:\n\nJob Title: " + job.title + "\nDescription: " + (job.description || "Not provided") + "\nRequirements: " + (job.qualifications || "Not provided") + "\n\nCandidate Background:\n- Current Role: " + (profile.current_job_title || "Not specified") + "\n- Specialization: " + (profile.specialization || "Not specified") + "\n- Skills: " + (profile.technical_skills ? profile.technical_skills.join(", ") : "Not specified") + "\n\nProvide:\n1. Why they're a good fit (3 points)\n2. Skills to emphasize in application (3 skills)\n3. Potential concerns to address (2 points)\n4. Cover letter tips (2 tips)\n\nBe encouraging and specific. Max 200 words.";
-
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    var result = await model.generateContent(prompt);
-    var response = await result.response;
-    var tips = response.text();
-
-    res.json({
-      jobTitle: job.title,
-      tips: tips,
-    });
-  } catch (error) {
-    console.error("AI Job Tips Error:", error);
-    res.status(500).json({ error: "Failed to generate job tips" });
-  }
-});
-
-// ========================================
-// START SERVER & MIGRATIONS
-// ========================================
-
 app.listen(PORT, function () {
   console.log("Backend running on port " + PORT);
-  console.log("Version: v9 with AI Career Coach");
 
+  // Auto-migration on startup
   pool.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT UNIQUE NOT NULL, password TEXT, role TEXT DEFAULT 'candidate', current_job_title TEXT, specialization TEXT, profile_summary TEXT, photo_url TEXT, cv_url TEXT, technical_skills TEXT[], soft_skills TEXT[], experience TEXT, education TEXT, courses TEXT, certificates TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())")
   .then(function () { 
     console.log("✅ users table OK"); 
@@ -550,6 +405,7 @@ app.listen(PORT, function () {
   })
   .then(function () { 
     console.log("✅ jobs table OK"); 
+    // Add new filter columns
     return pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS workplace TEXT");
   })
   .then(function () { 
@@ -579,7 +435,6 @@ app.listen(PORT, function () {
   .then(function () { 
     console.log("✅ applications table OK"); 
     console.log("🎉 All migrations complete!");
-    console.log("🤖 AI Career Coach ready!");
   })
   .catch(function (e) { 
     console.log("❌ Migration error: " + e.message); 

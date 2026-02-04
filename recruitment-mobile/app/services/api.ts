@@ -1,31 +1,31 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-/**
- * IMPORTANT:
- * - Render is DELETED
- * - Railway is the ONLY backend
- */
-const BASE_URL =
-  "https://recruitment-backend-production-6075.up.railway.app";
+const BASE_URL = "https://recruitment-backend-production-7c10.up.railway.app";
 
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000,
+  timeout: 60000,
+  maxContentLength: 100 * 1024 * 1024,
+  maxBodyLength: 100 * 1024 * 1024,
 });
 
-/**
- * Attach JWT token automatically if it exists
- */
 api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+      
+      console.log("🔵 Axios Request:", config.method?.toUpperCase(), config.url);
+      if (config.data) {
+        const dataStr = JSON.stringify(config.data);
+        console.log("🔵 Request body size:", dataStr.length, "bytes");
+        console.log("🔵 Request body keys:", Object.keys(config.data));
       }
     } catch (error) {
       console.log("Token error:", error);
@@ -35,10 +35,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-/**
- * GLOBAL RESPONSE SAFETY
- * Prevents app crashes on 4xx / 5xx errors
- */
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -68,9 +64,6 @@ api.interceptors.response.use(
   }
 );
 
-/**
- * SAFE GET
- */
 export async function apiGet(path: string) {
   try {
     const response = await api.get(path);
@@ -80,9 +73,6 @@ export async function apiGet(path: string) {
   }
 }
 
-/**
- * SAFE POST
- */
 export async function apiPost(path: string, body: any) {
   try {
     const response = await api.post(path, body);

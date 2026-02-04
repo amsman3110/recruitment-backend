@@ -1,5 +1,4 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -25,7 +24,8 @@ export default function EditProfileScreen() {
   const [photo, setPhoto] = useState(null);
   const [photoChanged, setPhotoChanged] = useState(false);
   const [cvUrl, setCvUrl] = useState(null);
-  const [cvName, setCvName] = useState(null);
+  const [cvFilename, setCvFilename] = useState(null);
+  const [cvUploadedAt, setCvUploadedAt] = useState(null);
   const [cvChanged, setCvChanged] = useState(false);
   const [technicalSkills, setTechnicalSkills] = useState([]);
   const [softSkills, setSoftSkills] = useState([]);
@@ -47,6 +47,8 @@ export default function EditProfileScreen() {
         setSummary(data.profile_summary || "");
         setPhoto(data.photo_url || null);
         setCvUrl(data.cv_url || null);
+        setCvFilename(data.cv_filename || null);
+        setCvUploadedAt(data.cv_uploaded_at || null);
         setTechnicalSkills(data.technical_skills || []);
         setSoftSkills(data.soft_skills || []);
         setExperience(data.experience || "");
@@ -78,31 +80,72 @@ export default function EditProfileScreen() {
   };
 
   const pickCV = async () => {
-    let result = await DocumentPicker.getDocumentAsync({
-      type: "application/pdf",
-    });
+    try {
+      console.log("=== CV PICKER START ===");
+      
+      let result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        copyToCacheDirectory: true,
+      });
 
-    if (result.type === "success") {
-      setCvUrl(result.uri);
-      setCvName(result.name);
+      console.log("Document picker result:", result);
+
+      if (result.type === "cancel" || result.canceled) {
+        console.log("CV picker cancelled");
+        return;
+      }
+
+      // Handle both old and new DocumentPicker API
+      const selectedFile = result.assets ? result.assets[0] : result;
+      
+      console.log("Selected file:", selectedFile);
+      setCvUrl(selectedFile.uri);
+      setCvFilename(selectedFile.name);
       setCvChanged(true);
+      
+      Alert.alert("Success", selectedFile.name + " selected");
+    } catch (error) {
+      console.log("Error picking CV:", error);
+      Alert.alert("Error", "Could not select CV file");
+    }
+  };
+
+  const uriToBase64 = async (uri) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result;
+          const base64 = base64data.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.log("Error converting to base64:", error);
+      throw error;
     }
   };
 
   const uploadPhoto = async () => {
     try {
+      console.log("=== PHOTO UPLOAD START ===");
+      console.log("Photo URI:", photo);
+      
       console.log("Converting photo to base64...");
-      
-      // Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(photo, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const base64 = await uriToBase64(photo);
 
-      console.log("Uploading photo to backend...");
+      console.log("Base64 conversion complete!");
+      console.log("Base64 length:", base64.length);
       
-      const result = await apiPost("/candidates/upload/photo", {
-        photo_base64: base64,
-      });
+      const payload = { photo_base64: base64 };
+      
+      console.log("Uploading photo to backend...");
+      const result = await apiPost("/candidates/upload/photo", payload);
       
       console.log("Photo uploaded successfully!");
       return result.photo_url;
@@ -115,24 +158,35 @@ export default function EditProfileScreen() {
 
   const uploadCV = async () => {
     try {
+      console.log("=== CV UPLOAD START ===");
+      console.log("CV URI:", cvUrl);
+      console.log("CV Filename:", cvFilename);
+      
       console.log("Converting CV to base64...");
-      
-      const base64 = await FileSystem.readAsStringAsync(cvUrl, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const base64 = await uriToBase64(cvUrl);
 
-      console.log("Uploading CV to backend...");
+      console.log("Base64 conversion complete!");
+      console.log("Base64 length:", base64.length);
       
-      const result = await apiPost("/candidates/upload/cv", {
+      const payload = { 
         cv_base64: base64,
-      });
+        cv_filename: cvFilename || "Resume.pdf"
+      };
+      
+      console.log("Uploading CV to backend...");
+      const result = await apiPost("/candidates/upload/cv", payload);
       
       console.log("CV uploaded successfully!");
-      return result.cv_url;
+      console.log("Result:", result);
+      
+      // Update local state with server response
+      setCvUploadedAt(result.cv_uploaded_at);
+      
+      return result;
     } catch (error) {
       console.log("CV upload error:", error);
       Alert.alert("CV Upload Failed", "Could not upload CV. Continuing without it.");
-      return cvUrl;
+      return { cv_url: cvUrl, cv_filename: cvFilename };
     }
   };
 
@@ -142,20 +196,26 @@ export default function EditProfileScreen() {
     try {
       let savedPhotoUrl = photo;
       let savedCvUrl = cvUrl;
+      let savedCvFilename = cvFilename;
+      let savedCvUploadedAt = cvUploadedAt;
 
-      // If photo changed and is a local file (not a data URL), upload it
+      // Upload photo if changed and is a local file
       if (photoChanged && photo && !photo.startsWith("data:")) {
+        console.log("Photo changed, uploading...");
         const newPhotoUrl = await uploadPhoto();
         if (newPhotoUrl) {
           savedPhotoUrl = newPhotoUrl;
         }
       }
 
-      // If CV changed and is a local file, upload it
+      // Upload CV if changed and is a local file
       if (cvChanged && cvUrl && !cvUrl.startsWith("data:")) {
-        const newCvUrl = await uploadCV();
-        if (newCvUrl) {
-          savedCvUrl = newCvUrl;
+        console.log("CV changed, uploading...");
+        const cvResult = await uploadCV();
+        if (cvResult) {
+          savedCvUrl = cvResult.cv_url;
+          savedCvFilename = cvResult.cv_filename;
+          savedCvUploadedAt = cvResult.cv_uploaded_at;
         }
       }
 
@@ -166,6 +226,8 @@ export default function EditProfileScreen() {
         summary: summary,
         photo_url: savedPhotoUrl,
         cv_url: savedCvUrl,
+        cv_filename: savedCvFilename,
+        cv_uploaded_at: savedCvUploadedAt,
         technicalSkills: technicalSkills,
         softSkills: softSkills,
         experience: experience,
@@ -173,6 +235,11 @@ export default function EditProfileScreen() {
         courses: courses,
         certificates: certificates,
       };
+
+      console.log("Saving profile with CV metadata:", {
+        cv_filename: savedCvFilename,
+        cv_uploaded_at: savedCvUploadedAt
+      });
 
       await apiPost("/candidate/update-profile", profileData);
 
@@ -261,7 +328,8 @@ export default function EditProfileScreen() {
             {cvChanged ? "CV Selected ✓" : cvUrl ? "Change CV" : "Upload CV"}
           </Text>
         </TouchableOpacity>
-        {cvName && <Text style={styles.cvNameText}>📄 {cvName}</Text>}
+        {cvFilename && <Text style={styles.cvNameText}>📄 {cvFilename}</Text>}
+        {cvUrl && !cvFilename && <Text style={styles.cvNameText}>📄 CV Uploaded</Text>}
       </View>
 
       <Text style={styles.label}>Technical Skills (comma separated)</Text>

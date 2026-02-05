@@ -420,7 +420,7 @@ app.post("/ai/analyze-profile", auth, async function (req, res) {
 
     var prompt = "You are a professional career coach. Analyze this job seeker's profile and provide specific, actionable advice.\n\nProfile Data:\n- Name: " + profileData.name + "\n- Current Job Title: " + profileData.jobTitle + "\n- Specialization: " + profileData.specialization + "\n- Summary: " + profileData.summary + "\n- Technical Skills: " + (profileData.technicalSkills.join(", ") || "None listed") + "\n- Soft Skills: " + (profileData.softSkills.join(", ") || "None listed") + "\n- Experience: " + profileData.experience + "\n- Education: " + profileData.education + "\n- Has Profile Photo: " + (profileData.hasPhoto ? "Yes" : "No") + "\n- Has CV Uploaded: " + (profileData.hasCV ? "Yes" : "No") + "\n\nProvide a brief analysis (max 200 words) with:\n1. Overall assessment\n2. 3 specific strengths\n3. 3 areas to improve\n4. 2 actionable next steps\n\nBe encouraging but honest.";
 
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    var model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var result = await model.generateContent(prompt);
     var response = await result.response;
     var analysis = response.text();
@@ -449,7 +449,7 @@ app.post("/ai/analyze-cv", auth, async function (req, res) {
 
     var prompt = "You are an expert CV reviewer. Provide advice for a " + (profile.current_job_title || "job seeker") + "'s CV.\n\nGive specific tips on:\n1. CV Structure and Format (3 tips)\n2. Content and Keywords (3 tips)\n3. Common mistakes to avoid (3 tips)\n4. How to stand out (2 tips)\n\nKeep it practical and actionable. Max 250 words.";
 
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    var model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var result = await model.generateContent(prompt);
     var response = await result.response;
     var analysis = response.text();
@@ -476,7 +476,7 @@ app.post("/ai/interview-prep", auth, async function (req, res) {
 
     var prompt = "You are an interview coach. Generate interview preparation tips for someone applying for: " + targetRole + "\n\nProvide:\n1. 5 common interview questions for this role (with brief answer guidance)\n2. 3 behavioral questions (STAR method tips)\n3. 3 questions the candidate should ask the interviewer\n4. 2 key preparation tips\n\nBe specific to the role. Max 300 words.";
 
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    var model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var result = await model.generateContent(prompt);
     var response = await result.response;
     var advice = response.text();
@@ -512,7 +512,7 @@ app.post("/ai/job-tips", auth, async function (req, res) {
 
     var prompt = "You are a job application coach. Help a candidate apply for this job:\n\nJob Title: " + job.title + "\nDescription: " + (job.description || "Not provided") + "\nRequirements: " + (job.qualifications || "Not provided") + "\n\nCandidate Background:\n- Current Role: " + (profile.current_job_title || "Not specified") + "\n- Specialization: " + (profile.specialization || "Not specified") + "\n- Skills: " + (profile.technical_skills ? profile.technical_skills.join(", ") : "Not specified") + "\n\nProvide:\n1. Why they're a good fit (3 points)\n2. Skills to emphasize in application (3 skills)\n3. Potential concerns to address (2 points)\n4. Cover letter tips (2 tips)\n\nBe encouraging and specific. Max 200 words.";
 
-    var model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    var model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var result = await model.generateContent(prompt);
     var response = await result.response;
     var tips = response.text();

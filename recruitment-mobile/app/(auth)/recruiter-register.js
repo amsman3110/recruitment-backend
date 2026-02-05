@@ -32,21 +32,14 @@ export default function RecruiterLogin() {
     try {
       console.log("=== RECRUITER LOGIN START ===");
       console.log("Email:", email);
-      console.log("Sending login request...");
+      console.log("Sending recruiter login request...");
 
-      const response = await apiPost("/auth/login", {
+      const response = await apiPost("/auth/login-recruiter", {
         email: email.trim(),
         password: password.trim(),
       });
 
       console.log("✅ Login successful:", response);
-
-      // Check if user is actually a recruiter
-      if (response.user.role !== 'recruiter') {
-        Alert.alert("Error", "Please use the candidate login");
-        setLoading(false);
-        return;
-      }
 
       // Save auth data for auto-login
       await saveAuth(
@@ -64,10 +57,9 @@ export default function RecruiterLogin() {
       router.replace("/(recruiter-tabs)");
     } catch (error) {
       console.error("❌ Recruiter login error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Invalid email or password";
       Alert.alert(
         "Login Failed",
-        errorMessage
+        error.message || "Invalid email or password"
       );
     } finally {
       setLoading(false);

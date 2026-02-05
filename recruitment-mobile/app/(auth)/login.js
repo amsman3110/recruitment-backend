@@ -15,7 +15,7 @@ import {
 import { apiPost } from "../services/api";
 import { saveAuth } from "../services/auth";
 
-export default function RecruiterLogin() {
+export default function CandidateLogin() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +30,7 @@ export default function RecruiterLogin() {
 
     setLoading(true);
     try {
-      console.log("=== RECRUITER LOGIN START ===");
+      console.log("=== CANDIDATE LOGIN START ===");
       console.log("Email:", email);
       console.log("Sending login request...");
 
@@ -41,9 +41,9 @@ export default function RecruiterLogin() {
 
       console.log("✅ Login successful:", response);
 
-      // Check if user is actually a recruiter
-      if (response.user.role !== 'recruiter') {
-        Alert.alert("Error", "Please use the candidate login");
+      // Check if user is actually a candidate
+      if (response.user.role !== 'candidate') {
+        Alert.alert("Error", "Please use the recruiter login");
         setLoading(false);
         return;
       }
@@ -55,19 +55,18 @@ export default function RecruiterLogin() {
           id: response.user.id,
           email: response.user.email,
           name: response.user.name,
-          role: 'recruiter',
+          role: 'candidate',
         },
         rememberMe
       );
 
       Alert.alert("Success", "Login successful!");
-      router.replace("/(recruiter-tabs)");
+      router.replace("/(tabs)");
     } catch (error) {
-      console.error("❌ Recruiter login error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Invalid email or password";
+      console.error("❌ Candidate login error:", error);
       Alert.alert(
         "Login Failed",
-        errorMessage
+        error.message || "Invalid email or password"
       );
     } finally {
       setLoading(false);
@@ -81,9 +80,9 @@ export default function RecruiterLogin() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Recruiter Login</Text>
+          <Text style={styles.title}>Candidate Login</Text>
           <Text style={styles.subtitle}>
-            Welcome back! Login to manage your recruitment.
+            Welcome back! Login to find your dream job.
           </Text>
 
           <TextInput
@@ -129,7 +128,7 @@ export default function RecruiterLogin() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push("/(auth)/recruiter-register")}
+            onPress={() => router.push("/(auth)/register")}
             disabled={loading}
           >
             <Text style={styles.linkText}>
@@ -193,14 +192,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderWidth: 2,
-    borderColor: "#4CAF50",
+    borderColor: "#007AFF",
     borderRadius: 4,
     marginRight: 10,
     justifyContent: "center",
     alignItems: "center",
   },
   checkboxChecked: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#007AFF",
   },
   checkmark: {
     color: "#fff",
@@ -212,7 +211,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   button: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#007AFF",
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
@@ -232,7 +231,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   linkBold: {
-    color: "#4CAF50",
+    color: "#007AFF",
     fontWeight: "600",
   },
 });

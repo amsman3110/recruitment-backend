@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { apiPost } from "../services/api";
+import { saveAuth } from "../services/auth";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -46,18 +47,20 @@ export default function RegisterScreen() {
 
       console.log("✅ Registration successful:", response);
 
-      Alert.alert(
-        "Success",
-        "Account created successfully. Please log in.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              router.replace("/(auth)/login");
-            },
-          },
-        ]
+      // Save auth for auto-login
+      await saveAuth(
+        response.token,
+        {
+          id: response.user.id,
+          email: response.user.email,
+          name: response.user.name || fullName,
+          role: 'candidate',
+        },
+        true
       );
+
+      Alert.alert("Success", "Registration successful!");
+      router.replace("/(tabs)");
     } catch (error) {
       console.error("❌ Registration error:", error);
       
@@ -124,7 +127,7 @@ export default function RegisterScreen() {
 
       <TouchableOpacity
         style={styles.linkButton}
-        onPress={() => router.push("/(auth)/login")}
+        onPress={() => router.push("/(auth)/candidate-login")}
       >
         <Text style={styles.linkText}>
           Already have an account? Login

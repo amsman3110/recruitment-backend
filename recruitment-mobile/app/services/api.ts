@@ -81,3 +81,11 @@ export async function apiPost(path: string, body: any) {
     throw error;
   }
 }
+export async function apiPut(path: string, body: any) {
+  try {
+    const response = await api.put(path, body);
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+}

@@ -1,6 +1,3 @@
-JS
-Copy
-
 const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
@@ -44,7 +41,7 @@ async function initDb() {
     await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER;");
 
     // Check if password_hash exists and rename it to password
-    var checkColumn = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash';");
+    const checkColumn = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash';");
 
     if (checkColumn.rows.length > 0) {
       await pool.query("ALTER TABLE users RENAME COLUMN password_hash TO password;");
@@ -58,7 +55,7 @@ async function initDb() {
     console.log("Migration completed successfully!");
 
     // Verify columns count
-    var result = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users';");
+    const result = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users';");
     console.log("Users table now has " + result.rows.length + " columns");
 
   } catch (error) {
@@ -67,7 +64,4 @@ async function initDb() {
 }
 
 // Export the pool for querying and the initDb function to initialize schema
-module.exports = {
-  pool,
-  initDb,
-};
+module.exports = pool;

@@ -424,11 +424,25 @@ Be encouraging and specific. Max 200 words.`;
 });
 
 // ========================================
-// START SERVER
+// START SERVER & RUN MIGRATIONS IN BACKGROUND
 // ========================================
 
+// Start server immediately
 app.listen(PORT, () => {
   console.log("Backend running on port " + PORT);
   console.log("Version: v10 - Phase 2 Recruiter System");
   console.log("✅ All routes registered");
+  
+  // Run migrations in background (non-blocking)
+  setTimeout(async () => {
+    try {
+      console.log("🔄 Running database migrations in background...");
+      await pool.query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS linkedin_url TEXT;");
+      await pool.query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS website_url TEXT;");
+      console.log("✅ LinkedIn and Website columns added to companies table");
+    } catch (error) {
+      console.error("⚠️ Migration warning:", error.message);
+      console.log("Note: Columns may already exist or database is unavailable");
+    }
+  }, 2000); // Wait 2 seconds after server starts
 });

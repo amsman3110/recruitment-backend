@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost } from "./services/api";
 
 export default function JobDetailScreen() {
   const router = useRouter();

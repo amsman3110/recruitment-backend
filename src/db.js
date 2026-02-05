@@ -40,6 +40,21 @@ async function initDb() {
     // Add experience_years to jobs table
     await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER;");
 
+    // Add missing status and other columns to jobs table
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS workplace TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS country TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS city TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS career_level TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_category TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_type TEXT;");
+    await pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_id INTEGER;");
+
+    // Add LinkedIn and Website columns to companies table
+    await pool.query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS linkedin_url TEXT;");
+    await pool.query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS website_url TEXT;");
+    console.log("✅ Added linkedin_url and website_url to companies table");
+
     // Check if password_hash exists and rename it to password
     const checkColumn = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash';");
 

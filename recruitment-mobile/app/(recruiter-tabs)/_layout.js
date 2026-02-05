@@ -16,6 +16,10 @@ export default function RecruiterTabLayout() {
         tabBarActiveTintColor: "#34C759",
         tabBarInactiveTintColor: "#8E8E93",
         headerShown: false,
+        // ⚡ Performance optimizations
+        lazy: true, // Load tabs only when visited
+        unmountOnBlur: false, // Keep tabs mounted after visiting
+        freezeOnBlur: true, // Freeze inactive tabs to save memory
       }}
     >
       <Tabs.Screen

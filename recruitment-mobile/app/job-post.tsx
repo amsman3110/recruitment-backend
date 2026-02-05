@@ -17,7 +17,7 @@ import {
     JOB_TYPES,
     WORKPLACE_OPTIONS,
 } from "../constants/filterData";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost } from "./services/api";
 
 export default function JobPostScreen() {
   const router = useRouter();

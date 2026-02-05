@@ -13,5 +13,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "app/(tabs)/edit-profile.jsx", "app/(tabs)/profile.jsx", "app/candidate-detail.js"  ]
+, "app/(tabs)/edit-profile.jsx", "app/(tabs)/profile.jsx", "app/candidate-detail.js", "app/(recruiter-tabs)/_layout.js", "app/(recruiter-tabs)/index.js"  ]
 }

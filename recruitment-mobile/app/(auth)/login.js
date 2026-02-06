@@ -30,43 +30,23 @@ export default function CandidateLogin() {
 
     setLoading(true);
     try {
-      console.log("=== CANDIDATE LOGIN START ===");
-      console.log("Email:", email);
-
       const response = await apiPost("/auth/login", {
         email: email.trim(),
         password: password.trim(),
       });
 
-      console.log("✅ Login successful:", response);
-
-      // Check if user is actually a candidate
       if (response.user.role !== 'candidate') {
-        Alert.alert("Error", "Please use the recruiter login");
+        Alert.alert("Error", "Please use the recruiter login button below");
         setLoading(false);
         return;
       }
 
-      // Save auth data
-      await saveAuth(
-        response.token,
-        {
-          id: response.user.id,
-          email: response.user.email,
-          name: response.user.name,
-          role: 'candidate',
-        },
-        rememberMe
-      );
+      // This saves the "Remember Me" choice to the phone's memory
+      await saveAuth(response.token, response.user, rememberMe);
 
-      Alert.alert("Success", "Login successful!");
       router.replace("/(tabs)");
     } catch (error) {
-      console.error("❌ Candidate login error:", error);
-      Alert.alert(
-        "Login Failed",
-        error.message || "Invalid email or password"
-      );
+      Alert.alert("Login Failed", error.message || "Invalid credentials");
     } finally {
       setLoading(false);
     }
@@ -74,44 +54,40 @@ export default function CandidateLogin() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>Candidate Login</Text>
-          <Text style={styles.subtitle}>
-            Welcome back! Login to find your dream job.
-          </Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Log in to your candidate account</Text>
+        </View>
 
+        <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder="Email Address"
             value={email}
             onChangeText={setEmail}
-            keyboardType="email-address"
             autoCapitalize="none"
-            editable={!loading}
+            keyboardType="email-address"
           />
-
           <TextInput
             style={styles.input}
             placeholder="Password"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            editable={!loading}
           />
 
           <TouchableOpacity
             style={styles.checkboxContainer}
             onPress={() => setRememberMe(!rememberMe)}
-            disabled={loading}
           >
             <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
               {rememberMe && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <Text style={styles.checkboxLabel}>Remember me</Text>
+            <Text style={styles.checkboxLabel}>Remember Me</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -122,28 +98,17 @@ export default function CandidateLogin() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.buttonText}>Log In</Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => router.push("/(auth)/register")}
-            disabled={loading}
-          >
-            <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <TouchableOpacity
+          {/* ADDED BACK: Navigation to Recruiter Login */}
+          <TouchableOpacity 
             onPress={() => router.push("/(auth)/recruiter-login")}
-            disabled={loading}
             style={styles.recruiterLink}
           >
             <Text style={styles.recruiterLinkText}>
-              🏢 Login as Recruiter
+              Are you a recruiter? <Text style={styles.linkHighlight}>Login here</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -153,38 +118,12 @@ export default function CandidateLogin() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-  formContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 10,
-    textAlign: "center",
-    color: "#333",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 30,
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  scrollContent: { flexGrow: 1, padding: 20, justifyContent: "center" },
+  header: { marginBottom: 40 },
+  title: { fontSize: 32, fontWeight: "bold", color: "#1c1c1e", marginBottom: 10 },
+  subtitle: { fontSize: 16, color: "#666" },
+  form: { width: "100%" },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -194,11 +133,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#f9f9f9",
   },
-  checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
+  checkboxContainer: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
   checkbox: {
     width: 24,
     height: 24,
@@ -209,58 +144,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  checkboxChecked: {
-    backgroundColor: "#007AFF",
-  },
-  checkmark: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  checkboxLabel: {
-    fontSize: 14,
-    color: "#333",
-  },
-  button: {
-    backgroundColor: "#007AFF",
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  linkText: {
-    textAlign: "center",
-    color: "#666",
-    fontSize: 14,
-  },
-  linkBold: {
-    color: "#007AFF",
-    fontWeight: "600",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#ddd",
-    marginVertical: 20,
-  },
-  recruiterLink: {
-    padding: 12,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  recruiterLinkText: {
-    textAlign: "center",
-    fontSize: 16,
-    color: "#4CAF50",
-    fontWeight: "600",
-  },
+  checkboxChecked: { backgroundColor: "#007AFF" },
+  checkmark: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  checkboxLabel: { fontSize: 14, color: "#333" },
+  button: { backgroundColor: "#007AFF", padding: 15, borderRadius: 8, alignItems: "center" },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  recruiterLink: { marginTop: 25, alignItems: "center" },
+  recruiterLinkText: { fontSize: 15, color: "#666" },
+  linkHighlight: { color: "#007AFF", fontWeight: "bold" }
 });

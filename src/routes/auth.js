@@ -38,7 +38,28 @@ router.post(
         [email, hashedPassword, name || null]
       );
 
-      res.status(201).json(result.rows[0]);
+      const user = result.rows[0];
+
+      // FIXED: Generate token for auto-login
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          role: user.role,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      // FIXED: Return token and user object
+      res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+        },
+      });
     } catch (error) {
       if (error.code === "23505") {
         return res.status(400).json({
@@ -54,7 +75,7 @@ router.post(
 /*
 ========================================
 POST /auth/login
-Login as CANDIDATE
+Login as CANDIDATE or RECRUITER (unified)
 ========================================
 */
 router.post(
@@ -72,8 +93,9 @@ router.post(
     const { email, password } = req.body;
 
     try {
+      // FIXED: Get name field too
       const result = await pool.query(
-        `SELECT id, email, password, role FROM users WHERE email = $1`,
+        `SELECT id, email, password, role, name FROM users WHERE email = $1`,
         [email]
       );
 
@@ -101,12 +123,14 @@ router.post(
         { expiresIn: "1h" }
       );
 
+      // FIXED: Include name in response
       res.json({
         token,
         user: {
           id: user.id,
           email: user.email,
           role: user.role,
+          name: user.name,
         },
       });
     } catch (error) {
@@ -168,11 +192,24 @@ router.post(
 
       await client.query("COMMIT");
 
+      // FIXED: Generate token for auto-login
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          role: user.role,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      // FIXED: Return token
       res.status(201).json({
+        token,
         user: {
           id: user.id,
           email: user.email,
           role: user.role,
+          name: companyName, // Use company name as display name
         },
         company: companyResult.rows[0],
       });
@@ -262,14 +299,17 @@ router.post(
         { expiresIn: "1h" }
       );
 
+      const companyData = companyResult.rows[0];
+
       res.json({
         token,
         user: {
           id: user.id,
           email: user.email,
           role: user.role,
+          name: companyData ? companyData.company_name : email, // Use company name
         },
-        company: companyResult.rows[0] || null,
+        company: companyData || null,
       });
     } catch (error) {
       res.status(500).json({ error: error.message });

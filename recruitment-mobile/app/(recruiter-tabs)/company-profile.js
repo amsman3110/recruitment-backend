@@ -1,4 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,11 +14,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { apiGet, apiPut } from "../services/api";
+import { clearAuth } from "../services/auth";
 
 export default function CompanyProfileScreen() {
+  const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,6 +79,29 @@ export default function CompanyProfileScreen() {
     setRefreshing(false);
   }
 
+  async function handleLogout() {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await clearAuth();
+              router.replace("/(auth)/login");
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert("Error", "Failed to logout");
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function openEditModal() {
     setFormData({
       company_name: profile?.company_name || "",
@@ -97,12 +125,11 @@ export default function CompanyProfileScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.5, // Compress to reduce size
+        quality: 0.5,
         base64: true,
       });
 
       if (!result.canceled && result.assets[0].base64) {
-        // Convert to data URI format
         const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
         setFormData({ ...formData, logo_base64: base64Image });
         Alert.alert("Success", "Logo uploaded! Don't forget to save.");
@@ -117,7 +144,6 @@ export default function CompanyProfileScreen() {
 
   async function takePicture() {
     try {
-      // Request camera permission
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission Required", "Camera permission is required");
@@ -164,7 +190,6 @@ export default function CompanyProfileScreen() {
       return;
     }
 
-    // Validate URLs if provided
     if (formData.linkedin_url && !isValidUrl(formData.linkedin_url)) {
       Alert.alert("Error", "Please enter a valid LinkedIn URL");
       return;
@@ -197,7 +222,6 @@ export default function CompanyProfileScreen() {
 
   async function openUrl(url) {
     try {
-      // Add https:// if not present
       let fullUrl = url;
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         fullUrl = 'https://' + url;
@@ -227,8 +251,18 @@ export default function CompanyProfileScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Company Profile</Text>
-          <Text style={styles.subtitle}>Set up your company</Text>
+          <View>
+            <Text style={styles.title}>Company Profile</Text>
+            <Text style={styles.subtitle}>Set up your company</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => router.push("/recruiter-settings")}>
+              <Ionicons name="settings-outline" size={20} color="#007AFF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.emptyState}>
@@ -263,9 +297,17 @@ export default function CompanyProfileScreen() {
           <Text style={styles.title}>Company Profile</Text>
           <Text style={styles.subtitle}>{profile.company_name}</Text>
         </View>
-        <Pressable style={styles.editButton} onPress={openEditModal}>
-          <Text style={styles.editButtonText}>✏️ Edit</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity style={styles.iconButton} onPress={openEditModal}>
+            <Ionicons name="create-outline" size={20} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push("/recruiter-settings")}>
+            <Ionicons name="settings-outline" size={20} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -278,23 +320,21 @@ export default function CompanyProfileScreen() {
           {/* Logo */}
           <View style={styles.logoContainer}>
             {profile.logo_base64 ? (
-              <Image 
-                source={{ uri: profile.logo_base64 }} 
-                style={styles.logoImage}
-              />
+              <Image source={{ uri: profile.logo_base64 }} style={styles.logoImage} />
             ) : (
               <View style={styles.logoPlaceholder}>
                 <Text style={styles.logoText}>
-                  {profile.company_name.charAt(0).toUpperCase()}
+                  {profile.company_name?.charAt(0)?.toUpperCase() || "C"}
                 </Text>
               </View>
             )}
           </View>
 
-          {/* Company Info */}
-          <View style={styles.infoSection}>
-            <Text style={styles.companyName}>{profile.company_name}</Text>
+          {/* Company Name */}
+          <Text style={styles.companyName}>{profile.company_name}</Text>
 
+          {/* Info Section */}
+          <View style={styles.infoSection}>
             {profile.industry && (
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Industry:</Text>
@@ -312,39 +352,29 @@ export default function CompanyProfileScreen() {
             {profile.number_of_employees && (
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Employees:</Text>
-                <Text style={styles.infoValue}>
-                  {profile.number_of_employees}
-                </Text>
+                <Text style={styles.infoValue}>{profile.number_of_employees}</Text>
               </View>
             )}
 
             {profile.office_location && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>📍 Location:</Text>
+                <Text style={styles.infoLabel}>Location:</Text>
                 <Text style={styles.infoValue}>{profile.office_location}</Text>
               </View>
             )}
 
-            {/* LinkedIn Link */}
             {profile.linkedin_url && (
-              <Pressable 
-                style={styles.linkRow}
-                onPress={() => openUrl(profile.linkedin_url)}
-              >
-                <Text style={styles.infoLabel}>🔗 LinkedIn:</Text>
+              <Pressable style={styles.linkRow} onPress={() => openUrl(profile.linkedin_url)}>
+                <Text style={styles.infoLabel}>LinkedIn:</Text>
                 <Text style={styles.linkValue} numberOfLines={1}>
                   {profile.linkedin_url}
                 </Text>
               </Pressable>
             )}
 
-            {/* Website Link */}
             {profile.website_url && (
-              <Pressable 
-                style={styles.linkRow}
-                onPress={() => openUrl(profile.website_url)}
-              >
-                <Text style={styles.infoLabel}>🌐 Website:</Text>
+              <Pressable style={styles.linkRow} onPress={() => openUrl(profile.website_url)}>
+                <Text style={styles.infoLabel}>Website:</Text>
                 <Text style={styles.linkValue} numberOfLines={1}>
                   {profile.website_url}
                 </Text>
@@ -352,7 +382,7 @@ export default function CompanyProfileScreen() {
             )}
           </View>
 
-          {/* Company Summary */}
+          {/* Summary */}
           {profile.company_summary && (
             <View style={styles.summarySection}>
               <Text style={styles.sectionTitle}>About Us</Text>
@@ -378,21 +408,13 @@ export default function CompanyProfileScreen() {
   );
 }
 
-// Separate Edit Modal Component
-function EditModal({ visible, formData, setFormData, onClose, onSave, onPickImage, uploadingImage }) {
+function EditModal({ visible, formData, setFormData, uploadingImage, onPickImage, onSave, onClose }) {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {formData.company_name ? "Edit" : "Create"} Company Profile
-            </Text>
+            <Text style={styles.modalTitle}>Edit Company Profile</Text>
             <Pressable onPress={onClose}>
               <Text style={styles.modalClose}>×</Text>
             </Pressable>
@@ -555,6 +577,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: "#8E8E93", marginTop: 4 },
   editButton: { backgroundColor: "#007AFF", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
   editButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F5F5F7", justifyContent: "center", alignItems: "center" },
   content: { flex: 1 },
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 80, paddingHorizontal: 40 },
   emptyIcon: { fontSize: 64, marginBottom: 16 },
@@ -591,7 +614,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: "#F5F5F7", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: "#000", borderWidth: 1, borderColor: "#E5E5EA" },
   textArea: { minHeight: 100, textAlignVertical: "top" },
   
-  // Logo upload styles
   logoUploadContainer: { alignItems: "center", marginBottom: 10 },
   logoPreview: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: "#E5E5EA" },
   logoUploadPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: "#F5F5F7", borderWidth: 2, borderColor: "#E5E5EA", borderStyle: "dashed", justifyContent: "center", alignItems: "center" },

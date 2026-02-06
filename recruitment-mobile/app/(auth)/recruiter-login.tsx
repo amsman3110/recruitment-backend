@@ -1,238 +1,181 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { apiPost } from "../services/api";
 import { saveAuth } from "../services/auth";
 
-export default function RecruiterLogin() {
+export default function RecruiterLoginScreen() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please fill in all fields");
+    console.log("=== RECRUITER LOGIN START ===");
+    console.log("Email:", email);
+
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter email and password");
       return;
     }
 
-    setLoading(true);
     try {
-      console.log("=== RECRUITER LOGIN START ===");
-      console.log("Email:", email);
-      console.log("Sending login request...");
+      setLoading(true);
+      console.log("Sending recruiter login request...");
 
-      const response = await apiPost("/auth/login", {
-        email: email.trim(),
-        password: password.trim(),
+      const response = await apiPost("/auth/login-recruiter", {
+        email: email,
+        password: password,
       });
 
-      console.log("✅ Login successful:", response);
+      console.log("✅ Recruiter login successful:", response);
 
-      // Check if user is actually a recruiter
-      if (response.user.role !== 'recruiter') {
-        Alert.alert("Error", "Please use the candidate login");
-        setLoading(false);
-        return;
-      }
-
-      // Save auth data for auto-login
+      // FIXED: Use saveAuth instead of AsyncStorage
       await saveAuth(
         response.token,
         {
           id: response.user.id,
           email: response.user.email,
-          name: response.user.name,
+          name: response.user.name || response.company?.company_name || email,
           role: 'recruiter',
         },
-        rememberMe
+        true
       );
 
       Alert.alert("Success", "Login successful!");
       router.replace("/(recruiter-tabs)");
     } catch (error) {
       console.error("❌ Recruiter login error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Invalid email or password";
-      Alert.alert(
-        "Login Failed",
-        errorMessage
-      );
+
+      const message =
+        (error && typeof error === "object" && "message" in error && (error as any).message) ||
+        "Login failed. Please try again.";
+      Alert.alert("Error", message);
     } finally {
       setLoading(false);
     }
   }
 
+  function handleGoToRegister() {
+    // FIXED: Correct path to recruiter register
+    router.push("/(auth)/recruiter-register");
+  }
+
+  function handleBackToSelector() {
+    router.back();
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>Recruiter Login</Text>
-          <Text style={styles.subtitle}>
-            Welcome back! Login to manage your recruitment.
-          </Text>
+    <View style={styles.container}>
+      <Pressable style={styles.backButton} onPress={handleBackToSelector}>
+        <Text style={styles.backButtonText}>← Back</Text>
+      </Pressable>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            editable={!loading}
-          />
+      <Text style={styles.title}>Recruiter Login</Text>
+      <Text style={styles.subtitle}>Access your company account</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
+      <TextInput
+        style={styles.input}
+        placeholder="Email Address"
+        placeholderTextColor="#999999"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+      />
 
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => setRememberMe(!rememberMe)}
-            disabled={loading}
-          >
-            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>Remember me (Auto-login)</Text>
-          </TouchableOpacity>
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        placeholderTextColor="#999999"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Login</Text>
-            )}
-          </TouchableOpacity>
+      <Pressable
+        style={styles.button}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? "Logging in..." : "Login as Recruiter"}
+        </Text>
+      </Pressable>
 
-          <TouchableOpacity
-            onPress={() => router.push("/(auth)/recruiter-register")}
-            disabled={loading}
-          >
-            <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Pressable onPress={handleGoToRegister}>
+        <Text style={styles.registerText}>
+          Don't have a recruiter account? Register here
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  scrollContent: {
-    flexGrow: 1,
+    padding: 24,
     justifyContent: "center",
-    padding: 20,
+    backgroundColor: "#121212",
   },
-  formContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  backButton: {
+    position: "absolute",
+    top: 60,
+    left: 24,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: 8,
     textAlign: "center",
-    color: "#333",
+    color: "#34C759",
   },
   subtitle: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 16,
+    color: "#AAAAAA",
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 32,
   },
   input: {
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#CCCCCC",
     borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
+    padding: 14,
     fontSize: 16,
-    backgroundColor: "#f9f9f9",
-  },
-  checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-    borderRadius: 4,
-    marginRight: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#4CAF50",
-  },
-  checkmark: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  checkboxLabel: {
-    fontSize: 14,
-    color: "#333",
+    marginBottom: 16,
+    color: "#000000",
   },
   button: {
-    backgroundColor: "#4CAF50",
-    padding: 15,
+    backgroundColor: "#34C759",
+    padding: 16,
     borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    marginTop: 8,
   },
   buttonText: {
-    color: "#fff",
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "600",
-  },
-  linkText: {
     textAlign: "center",
-    color: "#666",
-    fontSize: 14,
   },
-  linkBold: {
-    color: "#4CAF50",
-    fontWeight: "600",
+  registerText: {
+    marginTop: 20,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#CCCCCC",
   },
 });

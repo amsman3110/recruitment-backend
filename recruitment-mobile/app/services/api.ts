@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = "https://recruitment-backend-production-7c10.up.railway.app";
 
@@ -16,7 +16,8 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      // FIXED: Get token from SecureStore instead of AsyncStorage
+      const token = await SecureStore.getItemAsync('token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }

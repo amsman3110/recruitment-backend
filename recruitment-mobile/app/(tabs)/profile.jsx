@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { apiGet } from "../services/api";
+import { clearAuth } from "../services/auth";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -555,6 +556,29 @@ export default function CandidateProfileScreen() {
     }
   };
 
+  async function handleLogout() {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await clearAuth();
+              router.replace("/(auth)/login");
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert("Error", "Failed to logout");
+            }
+          },
+        },
+      ]
+    );
+  }
+
   // ============================================
   // LOADING STATE
   // ============================================
@@ -596,9 +620,17 @@ export default function CandidateProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity onPress={() => router.push("/edit-profile")}>
-          <Text style={styles.editButton}>Edit</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity onPress={() => router.push("/(tabs)/edit-profile")}>
+            <Text style={styles.editButton}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/candidate-settings")}>
+            <Ionicons name="settings-outline" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Photo & Basic Info */}
@@ -623,7 +655,7 @@ export default function CandidateProfileScreen() {
 
         <TouchableOpacity
           style={styles.editProfileButton}
-          onPress={() => router.push("/edit-profile")}
+          onPress={() => router.push("/(tabs)/edit-profile")}
         >
           <Ionicons name="create-outline" size={18} color={COLORS.text} />
           <Text style={styles.editProfileButtonText}>Edit Profile</Text>
@@ -672,7 +704,7 @@ export default function CandidateProfileScreen() {
           </Text>
           <TouchableOpacity
             style={styles.completeProfileButton}
-            onPress={() => router.push("/edit-profile")}
+            onPress={() => router.push("/(tabs)/edit-profile")}
           >
             <Ionicons name="add-circle-outline" size={20} color={COLORS.text} />
             <Text style={styles.completeProfileButtonText}>Add Information</Text>

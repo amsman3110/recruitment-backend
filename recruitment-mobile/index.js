@@ -1,62 +1,140 @@
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { getAuthState } from './services/auth';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function Index() {
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+  const [logs, setLogs] = useState([]);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    checkAuthAndRedirect();
+    testStorage();
   }, []);
 
-  async function checkAuthAndRedirect() {
+  async function testStorage() {
+    const logMessages = [];
+    
+    logMessages.push('🔍 TESTING SECURESTORE...');
+    
     try {
-      console.log('🔍 Checking authentication status...');
-      const authState = await getAuthState();
-
-      if (authState.isAuthenticated && authState.userType) {
-        console.log('✅ User authenticated:', authState.userType);
-        
-        // User is logged in - redirect to appropriate dashboard
-        if (authState.userType === 'recruiter') {
-          console.log('→ Redirecting to recruiter dashboard');
-          router.replace('/(recruiter-tabs)');
-        } else {
-          console.log('→ Redirecting to candidate dashboard');
-          router.replace('/(candidate-tabs)');
-        }
+      // Test 1: Try to read all auth keys
+      logMessages.push('\n📖 Reading stored data:');
+      
+      const token = await SecureStore.getItemAsync('token');
+      logMessages.push(`Token: ${token ? token.substring(0, 20) + '...' : 'NULL'}`);
+      
+      const userType = await SecureStore.getItemAsync('userType');
+      logMessages.push(`UserType: ${userType || 'NULL'}`);
+      
+      const userData = await SecureStore.getItemAsync('userData');
+      logMessages.push(`UserData: ${userData || 'NULL'}`);
+      
+      const rememberMe = await SecureStore.getItemAsync('rememberMe');
+      logMessages.push(`RememberMe: ${rememberMe || 'NULL'}`);
+      
+      // Test 2: Try to write test data
+      logMessages.push('\n✍️ Writing test data...');
+      await SecureStore.setItemAsync('test_key', 'test_value');
+      logMessages.push('✅ Write successful');
+      
+      // Test 3: Try to read test data
+      const testValue = await SecureStore.getItemAsync('test_key');
+      logMessages.push(`Read test: ${testValue}`);
+      
+      if (testValue === 'test_value') {
+        logMessages.push('✅ SecureStore is WORKING!');
       } else {
-        console.log('❌ No authentication found');
-        // Not logged in - show role selection
-        router.replace('/(auth)/login-type');
+        logMessages.push('❌ SecureStore read/write FAILED');
       }
+      
+      // Decision
+      logMessages.push('\n🎯 DECISION:');
+      if (token && userType) {
+        logMessages.push('✅ Auth data found - should auto-login');
+        logMessages.push(`Redirecting to: ${userType === 'recruiter' ? '/(recruiter-tabs)' : '/(tabs)'}`);
+        
+        setTimeout(() => {
+          if (userType === 'recruiter') {
+            router.replace('/(recruiter-tabs)');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }, 3000);
+      } else {
+        logMessages.push('❌ No auth data - going to login');
+        logMessages.push('This means login did NOT save the data!');
+        
+        setTimeout(() => {
+          router.replace('/(auth)/login-type');
+        }, 3000);
+      }
+      
     } catch (error) {
-      console.error('Auth check failed:', error);
-      // On error, go to role selection
-      router.replace('/(auth)/login-type');
-    } finally {
-      setIsChecking(false);
+      logMessages.push(`❌ ERROR: ${error.message}`);
     }
+    
+    setLogs(logMessages);
+    setChecking(false);
   }
 
-  if (isChecking) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+  function goToLogin() {
+    router.replace('/(auth)/login-type');
   }
 
-  return null;
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>🔍 Storage Debug</Text>
+      
+      {checking && <ActivityIndicator size="large" color="#007AFF" />}
+      
+      <ScrollView style={styles.logContainer}>
+        {logs.map((log, index) => (
+          <Text key={index} style={styles.logText}>{log}</Text>
+        ))}
+      </ScrollView>
+      
+      <TouchableOpacity style={styles.button} onPress={goToLogin}>
+        <Text style={styles.buttonText}>GO TO LOGIN</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 20,
     backgroundColor: '#fff',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 50,
+    marginBottom: 20,
+  },
+  logContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  logText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginBottom: 5,
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

@@ -15,52 +15,69 @@ import {
 import { apiPost } from "../services/api";
 import { saveAuth } from "../services/auth";
 
-export default function RecruiterLogin() {
+export default function RecruiterRegister() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [industry, setIndustry] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please fill in all fields");
+  async function handleRegister() {
+    console.log("=== RECRUITER REGISTER START ===");
+    console.log("Email:", email);
+    console.log("Company:", companyName);
+
+    if (!email || !password || !confirmPassword || !companyName) {
+      Alert.alert("Error", "Please fill in all required fields");
       return;
     }
 
-    setLoading(true);
-    try {
-      console.log("=== RECRUITER LOGIN START ===");
-      console.log("Email:", email);
-      console.log("Sending recruiter login request...");
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
 
-      const response = await apiPost("/auth/login-recruiter", {
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log("Sending recruiter registration request...");
+
+      const response = await apiPost("/auth/register-recruiter", {
         email: email.trim(),
-        password: password.trim(),
+        password: password,
+        companyName: companyName,
+        industry: industry || null,
       });
 
-      console.log("✅ Login successful:", response);
+      console.log("✅ Recruiter registration successful:", response);
 
-      // Save auth data for auto-login
+      // Save auth for auto-login
       await saveAuth(
         response.token,
         {
           id: response.user.id,
           email: response.user.email,
-          name: response.user.name,
+          name: response.user.name || companyName,
           role: 'recruiter',
         },
-        rememberMe
+        true
       );
 
-      Alert.alert("Success", "Login successful!");
+      Alert.alert("Success", "Registration successful!");
       router.replace("/(recruiter-tabs)");
     } catch (error) {
-      console.error("❌ Recruiter login error:", error);
-      Alert.alert(
-        "Login Failed",
-        error.message || "Invalid email or password"
-      );
+      console.error("❌ Recruiter registration error:", error);
+
+      const message =
+        (error && typeof error === "object" && "message" in error && error.message) ||
+        "Registration failed. Please try again.";
+      Alert.alert("Error", message);
     } finally {
       setLoading(false);
     }
@@ -73,14 +90,30 @@ export default function RecruiterLogin() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Recruiter Login</Text>
+          <Text style={styles.title}>Register as Recruiter</Text>
           <Text style={styles.subtitle}>
-            Welcome back! Login to manage your recruitment.
+            Create your company account
           </Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder="Company Name *"
+            value={companyName}
+            onChangeText={setCompanyName}
+            editable={!loading}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Industry (e.g., Technology, Finance)"
+            value={industry}
+            onChangeText={setIndustry}
+            editable={!loading}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email Address *"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -90,42 +123,42 @@ export default function RecruiterLogin() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder="Password (min 6 characters) *"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             editable={!loading}
           />
 
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => setRememberMe(!rememberMe)}
-            disabled={loading}
-          >
-            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>Remember me (Auto-login)</Text>
-          </TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm Password *"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            editable={!loading}
+          />
+
+          <Text style={styles.requiredNote}>* Required fields</Text>
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleRegister}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.buttonText}>Register as Recruiter</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push("/(auth)/recruiter-register")}
+            onPress={() => router.push("/(auth)/recruiter-login")}
             disabled={loading}
           >
             <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
+              Already have an account? <Text style={styles.linkBold}>Login</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -159,7 +192,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 10,
     textAlign: "center",
-    color: "#333",
+    color: "#4CAF50",
   },
   subtitle: {
     fontSize: 14,
@@ -176,32 +209,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#f9f9f9",
   },
-  checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-    borderRadius: 4,
-    marginRight: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#4CAF50",
-  },
-  checkmark: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  checkboxLabel: {
-    fontSize: 14,
-    color: "#333",
+  requiredNote: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 15,
+    fontStyle: "italic",
   },
   button: {
     backgroundColor: "#4CAF50",

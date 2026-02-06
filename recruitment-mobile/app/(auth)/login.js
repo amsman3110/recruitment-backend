@@ -32,7 +32,6 @@ export default function CandidateLogin() {
     try {
       console.log("=== CANDIDATE LOGIN START ===");
       console.log("Email:", email);
-      console.log("Sending login request...");
 
       const response = await apiPost("/auth/login", {
         email: email.trim(),
@@ -48,7 +47,7 @@ export default function CandidateLogin() {
         return;
       }
 
-      // Save auth data for auto-login
+      // Save auth data
       await saveAuth(
         response.token,
         {
@@ -112,7 +111,7 @@ export default function CandidateLogin() {
             <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
               {rememberMe && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <Text style={styles.checkboxLabel}>Remember me (Auto-login)</Text>
+            <Text style={styles.checkboxLabel}>Remember me</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -133,6 +132,18 @@ export default function CandidateLogin() {
           >
             <Text style={styles.linkText}>
               Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity
+            onPress={() => router.push("/(auth)/recruiter-login")}
+            disabled={loading}
+            style={styles.recruiterLink}
+          >
+            <Text style={styles.recruiterLinkText}>
+              🏢 Login as Recruiter
             </Text>
           </TouchableOpacity>
         </View>
@@ -232,6 +243,24 @@ const styles = StyleSheet.create({
   },
   linkBold: {
     color: "#007AFF",
+    fontWeight: "600",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#ddd",
+    marginVertical: 20,
+  },
+  recruiterLink: {
+    padding: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  recruiterLinkText: {
+    textAlign: "center",
+    fontSize: 16,
+    color: "#4CAF50",
     fontWeight: "600",
   },
 });

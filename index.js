@@ -283,7 +283,10 @@ Provide a brief analysis (max 200 words) with:
 
 Be encouraging but honest.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash",
+  apiVersion: "v1" 
+});
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const analysis = response.text();
@@ -320,7 +323,10 @@ Give specific tips on:
 
 Keep it practical and actionable. Max 250 words.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash",
+  apiVersion: "v1" 
+});
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const analysis = response.text();
@@ -355,7 +361,10 @@ Provide:
 
 Be specific to the role. Max 300 words.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash",
+  apiVersion: "v1" 
+});
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const advice = response.text();
@@ -408,7 +417,10 @@ Provide:
 
 Be encouraging and specific. Max 200 words.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash",
+  apiVersion: "v1" 
+});
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const tips = response.text();

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useState } from "react";
@@ -22,6 +22,9 @@ export default function CandidateDetailScreen() {
   
   const rawCandidateId = params.id;
   const candidateId = Array.isArray(rawCandidateId) ? rawCandidateId[0] : rawCandidateId;
+  
+  const rawJobId = params.jobId;
+  const jobId = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId;
 
   const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +96,7 @@ export default function CandidateDetailScreen() {
         const fileUri = FileSystem.documentDirectory + filename;
 
         return FileSystem.writeAsStringAsync(fileUri, base64Data, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         }).then(() => {
           console.log("CV saved to:", fileUri);
           return Sharing.isAvailableAsync();
@@ -122,10 +125,10 @@ export default function CandidateDetailScreen() {
       return;
     }
 
-    const jobId = selectedJob.id;
+    const selectedJobId = selectedJob.id;
     apiPost("/invitations/send", {
       candidate_id: parseInt(String(candidateId)),
-      job_id: jobId,
+      job_id: selectedJobId,
       message: inviteMessage,
     })
       .then(() => {
@@ -142,15 +145,36 @@ export default function CandidateDetailScreen() {
   }
 
   function handleAddToPipeline() {
+    // If we came from a job detail page, use that jobId directly
+    if (jobId) {
+      apiPost("/pipeline/add", {
+        candidate_id: parseInt(String(candidateId)),
+        job_id: parseInt(jobId),
+        stage: pipelineStage,
+      })
+        .then(() => {
+          Alert.alert("Success", "Candidate added to pipeline");
+          setPipelineModalVisible(false);
+          setPipelineStage("shortlisted");
+        })
+        .catch((error) => {
+          console.error("Error adding to pipeline:", error);
+          const errorMsg = error && error.message ? error.message : "Failed to add to pipeline";
+          Alert.alert("Error", errorMsg);
+        });
+      return;
+    }
+
+    // Otherwise, require job selection
     if (!selectedJob) {
       Alert.alert("Error", "Please select a job");
       return;
     }
 
-    const jobId = selectedJob.id;
+    const selectedJobId = selectedJob.id;
     apiPost("/pipeline/add", {
       candidate_id: parseInt(String(candidateId)),
-      job_id: jobId,
+      job_id: selectedJobId,
       stage: pipelineStage,
     })
       .then(() => {
@@ -394,25 +418,29 @@ export default function CandidateDetailScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add to Pipeline</Text>
 
-            <Text style={styles.modalLabel}>Select Job:</Text>
-            <ScrollView style={styles.jobsList}>
-              {jobs.map((job) => {
-                const isSelected = Boolean(selectedJob && selectedJob.id === job.id);
-                const jobTitle = job.title || "No Title";
-                const jobLocation = job.location || "No Location";
-                
-                return (
-                  <Pressable
-                    key={job.id}
-                    style={isSelected ? [styles.jobItem, styles.jobItemSelected] : styles.jobItem}
-                    onPress={() => setSelectedJob(job)}
-                  >
-                    <Text style={styles.jobItemTitle}>{jobTitle}</Text>
-                    <Text style={styles.jobItemLocation}>{jobLocation}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            {!jobId && (
+              <>
+                <Text style={styles.modalLabel}>Select Job:</Text>
+                <ScrollView style={styles.jobsList}>
+                  {jobs.map((job) => {
+                    const isSelected = Boolean(selectedJob && selectedJob.id === job.id);
+                    const jobTitle = job.title || "No Title";
+                    const jobLocation = job.location || "No Location";
+                    
+                    return (
+                      <Pressable
+                        key={job.id}
+                        style={isSelected ? [styles.jobItem, styles.jobItemSelected] : styles.jobItem}
+                        onPress={() => setSelectedJob(job)}
+                      >
+                        <Text style={styles.jobItemTitle}>{jobTitle}</Text>
+                        <Text style={styles.jobItemLocation}>{jobLocation}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
 
             <Text style={styles.modalLabel}>Pipeline Stage:</Text>
             <View style={styles.stagesList}>

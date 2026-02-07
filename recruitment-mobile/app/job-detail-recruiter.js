@@ -109,7 +109,7 @@ export default function JobDetailScreen() {
   }
 
   function handleViewCandidate(candidateId) {
-    router.push(`/candidate-detail?id=${candidateId}`);
+   router.push(`/candidate-detail?id=${candidateId}&jobId=${jobId}`);
   }
 
   if (loading) {

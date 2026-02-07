@@ -67,13 +67,17 @@ export default function JobsScreen() {
       if (selectedDatePosted && selectedDatePosted !== "all") {
         params.append("date_posted", selectedDatePosted);
       }
+      
+      // Force refresh by adding a timestamp
+      params.append("t", Date.now().toString());
 
       var queryString = params.toString();
-      var endpoint = queryString ? "/jobs?" + queryString : "/jobs";
+      var endpoint = "/jobs?" + queryString;
 
       console.log("Fetching jobs with filters:", endpoint);
 
       const data = await apiGet(endpoint);
+      console.log("Jobs received in Jobs Screen:", data.length);
       setJobs(data);
     } catch (err) {
       console.error("Error fetching jobs:", err);
@@ -82,7 +86,6 @@ export default function JobsScreen() {
       setLoading(false);
     }
   }
-
   function handleSearch() {
     fetchJobs();
   }

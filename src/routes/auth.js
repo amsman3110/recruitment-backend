@@ -47,7 +47,7 @@ router.post(
           role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "36500d" }
       );
 
       // FIXED: Return token and user object
@@ -120,7 +120,7 @@ router.post(
           role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "36500d" }
       );
 
       // FIXED: Include name in response
@@ -199,7 +199,7 @@ router.post(
           role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "36500d" }
       );
 
       // FIXED: Return token
@@ -296,7 +296,7 @@ router.post(
           role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "36500d" }
       );
 
       const companyData = companyResult.rows[0];

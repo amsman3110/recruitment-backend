@@ -27,21 +27,27 @@ export default function HomeScreen() {
     console.log("🏠 HOME: useEffect triggered");
     loadData();
   }, []);
-async function loadData() {
+
+  async function loadData() {
     try {
       setLoading(true);
 
       console.log("=== HOME: LOADING DATA ===");
       
       const profile = await apiGet("/candidate/profile");
+      console.log("Profile data:", profile);
+      console.log("Profile name:", profile.name);
+      
       setUserName(profile.name || "User");
 
       const apps = await apiGet("/applications");
+      console.log("Applications count:", apps.length);
       setApplications(apps);
 
-      // We add ?t= to force the app to get the LATEST jobs from the DB
+      // ADDED CACHE BUSTER: This ensures fresh data from the DB
       const jobs = await apiGet(`/jobs?t=${Date.now()}`);
-      console.log("Jobs count from DB:", jobs.length);
+      console.log("Database Jobs Found:", jobs.length);
+      
       setRecommendedJobs(jobs.slice(0, 5));
       
       console.log("=== HOME: DATA LOADED ===");
@@ -121,7 +127,8 @@ async function loadData() {
               style={styles.applicationCard}
               onPress={() => {
                 if (app.job_id) {
-                  router.push("/job-details?id=" + app.job_id);
+                  // UPDATED ROUTE: Matches standard Detail path
+                  router.push("/jobs/" + app.job_id);
                 }
               }}
             >
@@ -166,11 +173,12 @@ async function loadData() {
         ) : (
           recommendedJobs.map((job) => (
             <Pressable
-              key={job.id}
+              key={job.id ? job.id.toString() : Math.random().toString()}
               style={styles.jobCard}
               onPress={() => {
                 if (job.id) {
-                  router.push("/job-details?id=" + job.id);
+                  // UPDATED ROUTE: Matches standard Detail path
+                  router.push("/jobs/" + job.id);
                 }
               }}
             >

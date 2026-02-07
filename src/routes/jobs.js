@@ -244,12 +244,22 @@ router.delete(
 /*
 ========================================
 GET /jobs
-Get all jobs (public for candidates, filtered for recruiters)
+Get all jobs with filters and search
+FIXED: Added auth middleware and fixed company_name join
 ========================================
 */
 router.get(
   "/",
+  auth, // ← ADDED: Now requires authentication
   [
+    query("search").optional().isString(),
+    query("workplace").optional().isString(),
+    query("country").optional().isString(),
+    query("city").optional().isString(),
+    query("career_level").optional().isString(),
+    query("job_category").optional().isString(),
+    query("job_type").optional().isString(),
+    query("date_posted").optional().isString(),
     query("min_experience")
       .optional()
       .isInt({ min: 0 })
@@ -265,41 +275,134 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { location, min_experience, status } = req.query;
-
-    let queryStr = "SELECT * FROM jobs WHERE 1=1";
-    const values = [];
-
-    // Candidates only see open jobs
-    // Recruiters see all their jobs
-    if (!req.user || req.user.role === "candidate") {
-      queryStr += " AND status = 'open'";
-    } else if (req.user.role === "recruiter") {
-      values.push(req.user.userId);
-      queryStr += ` AND posted_by = $${values.length}`;
-
-      if (status) {
-        values.push(status);
-        queryStr += ` AND status = $${values.length}`;
-      }
-    }
-
-    if (location) {
-      values.push(location);
-      queryStr += ` AND location = $${values.length}`;
-    }
-
-    if (min_experience) {
-      values.push(Number(min_experience));
-      queryStr += ` AND experience_years >= $${values.length}`;
-    }
-
-    queryStr += " ORDER BY created_at DESC";
+    const {
+      search,
+      workplace,
+      country,
+      city,
+      career_level,
+      job_category,
+      job_type,
+      date_posted,
+      location,
+      min_experience,
+      status,
+    } = req.query;
 
     try {
+      // FIXED: Added company_name to SELECT with LEFT JOIN
+      let queryStr = `
+        SELECT j.*, c.company_name 
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.id
+        WHERE 1=1
+      `;
+      const values = [];
+
+      // Role-based filtering
+      if (req.user.role === "candidate") {
+        // Candidates only see open jobs
+        queryStr += " AND j.status = 'open'";
+      } else if (req.user.role === "recruiter") {
+        // Recruiters see only their own jobs
+        values.push(req.user.userId);
+        queryStr += ` AND j.posted_by = $${values.length}`;
+
+        if (status) {
+          values.push(status);
+          queryStr += ` AND j.status = $${values.length}`;
+        }
+      }
+
+      // Search filter
+      if (search) {
+        values.push(`%${search}%`);
+        queryStr += ` AND (j.title ILIKE $${values.length} OR j.description ILIKE $${values.length})`;
+      }
+
+      // Workplace filter
+      if (workplace) {
+        values.push(workplace);
+        queryStr += ` AND j.workplace = $${values.length}`;
+      }
+
+      // Country filter
+      if (country) {
+        values.push(country);
+        queryStr += ` AND j.country = $${values.length}`;
+      }
+
+      // City filter
+      if (city) {
+        values.push(city);
+        queryStr += ` AND j.city = $${values.length}`;
+      }
+
+      // Career level filter
+      if (career_level) {
+        values.push(career_level);
+        queryStr += ` AND j.career_level = $${values.length}`;
+      }
+
+      // Job category filter
+      if (job_category) {
+        values.push(job_category);
+        queryStr += ` AND j.job_category = $${values.length}`;
+      }
+
+      // Job type filter
+      if (job_type) {
+        values.push(job_type);
+        queryStr += ` AND j.job_type = $${values.length}`;
+      }
+
+      // Location filter (legacy support)
+      if (location) {
+        values.push(location);
+        queryStr += ` AND j.location = $${values.length}`;
+      }
+
+      // Experience filter
+      if (min_experience) {
+        values.push(Number(min_experience));
+        queryStr += ` AND j.experience_years >= $${values.length}`;
+      }
+
+      // Date posted filter
+      if (date_posted && date_posted !== "all") {
+        const now = new Date();
+        let dateThreshold;
+
+        if (date_posted === "24h") {
+          dateThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        } else if (date_posted === "3d") {
+          dateThreshold = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+        } else if (date_posted === "7d") {
+          dateThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (date_posted === "14d") {
+          dateThreshold = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+        } else if (date_posted === "30d") {
+          dateThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+
+        if (dateThreshold) {
+          values.push(dateThreshold.toISOString());
+          queryStr += ` AND j.created_at >= $${values.length}`;
+        }
+      }
+
+      queryStr += " ORDER BY j.created_at DESC";
+
+      console.log("📊 Final Query:", queryStr);
+      console.log("📊 Query Values:", values);
+
       const result = await pool.query(queryStr, values);
+      
+      console.log(`✅ Found ${result.rows.length} jobs for ${req.user.role}`);
+      
       res.json(result.rows);
     } catch (error) {
+      console.error("❌ Error fetching jobs:", error);
       res.status(500).json({ error: error.message });
     }
   }

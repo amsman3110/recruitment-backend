@@ -184,7 +184,7 @@ router.get(
 
     try {
       const result = await pool.query(
-        `SELECT cv_base64, name
+        `SELECT cv_base64, cv_url, cv_filename, name
          FROM users
          WHERE id = $1 AND role = 'candidate'`,
         [req.params.id]
@@ -196,20 +196,24 @@ router.get(
         });
       }
 
-      const { cv_base64, name } = result.rows[0];
+      const { cv_base64, cv_url, cv_filename, name } = result.rows[0];
 
-      if (!cv_base64) {
+      // Check cv_base64 first, then cv_url as fallback
+      const cvData = cv_base64 || cv_url;
+
+      if (!cvData) {
         return res.status(404).json({
           error: "CV not uploaded by candidate",
         });
       }
 
       res.json({
-        cv_base64: cv_base64,
-        filename: `${name || "candidate"}_CV.pdf`,
+        cv_base64: cvData,
+        filename: cv_filename || `${name || "candidate"}_CV.pdf`,
         mime_type: "application/pdf",
       });
     } catch (error) {
+      console.error("CV download error:", error);
       res.status(500).json({ error: error.message });
     }
   }

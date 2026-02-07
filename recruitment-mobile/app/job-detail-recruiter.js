@@ -23,7 +23,6 @@ export default function JobDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState("applications");
 
-  // Modal for moving candidates
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [selectedStage, setSelectedStage] = useState("");
@@ -48,12 +47,10 @@ export default function JobDetailScreen() {
       setLoading(true);
       console.log("📥 Loading job details for job ID:", jobId);
 
-      // Load job details
       const jobData = await apiGet(`/jobs/${jobId}`);
       console.log("✅ Job loaded:", jobData);
       setJob(jobData);
 
-      // Load applications with error handling
       try {
         const appsData = await apiGet(`/jobs/${jobId}/applications`);
         console.log("✅ Applications loaded:", appsData.length);
@@ -63,7 +60,6 @@ export default function JobDetailScreen() {
         setApplications([]);
       }
 
-      // Load pipeline with error handling
       try {
         const pipelineData = await apiGet(`/pipeline/${jobId}`);
         console.log("✅ Pipeline loaded:", pipelineData);
@@ -76,7 +72,7 @@ export default function JobDetailScreen() {
       setLoading(false);
     } catch (error) {
       console.error("❌ Error loading job details:", error);
-      Alert.alert("Error", "Failed to load job details: " + (error.message || "Unknown error"));
+      Alert.alert("Error", "Failed to load job details");
       setLoading(false);
     }
   }
@@ -99,7 +95,6 @@ export default function JobDetailScreen() {
       setSelectedCandidate(null);
       setSelectedStage("");
       
-      // Reload data
       loadJobDetails();
     } catch (error) {
       console.error("Error moving candidate:", error);
@@ -139,7 +134,6 @@ export default function JobDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.backButtonText}>← Back</Text>
@@ -149,7 +143,6 @@ export default function JobDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Job Info Card */}
         <View style={styles.jobCard}>
           <View style={styles.jobHeader}>
             <Text style={styles.jobTitle}>{job.title}</Text>
@@ -192,7 +185,6 @@ export default function JobDetailScreen() {
           )}
         </View>
 
-        {/* Tabs */}
         <View style={styles.tabsContainer}>
           <Pressable
             style={[
@@ -228,23 +220,16 @@ export default function JobDetailScreen() {
           </Pressable>
         </View>
 
-        {/* Applications Tab */}
         {selectedTab === "applications" && (
           <View style={styles.section}>
             {applications.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>📋</Text>
-                <Text style={styles.emptyText}>
-                  No applications yet
-                </Text>
+                <Text style={styles.emptyText}>No applications yet</Text>
               </View>
             ) : (
               applications.map((app) => (
-                <Pressable
-                  key={app.application_id}
-                  style={styles.applicationCard}
-                  onPress={() => handleViewCandidate(app.candidate_id)}
-                >
+                <View key={app.application_id} style={styles.applicationCard}>
                   <View style={styles.candidateHeader}>
                     <View style={styles.candidateAvatar}>
                       <Text style={styles.candidateAvatarText}>
@@ -264,32 +249,35 @@ export default function JobDetailScreen() {
                     </View>
                   </View>
 
-                  <View style={styles.applicationFooter}>
-                    <Text style={styles.appliedDate}>
-                      Applied: {new Date(app.applied_at).toLocaleDateString()}
-                    </Text>
+                  <Text style={styles.appliedDate}>
+                    Applied: {new Date(app.applied_at).toLocaleDateString()}
+                  </Text>
+
+                  <View style={styles.candidateActions}>
+                    <Pressable
+                      style={styles.viewProfileButton}
+                      onPress={() => handleViewCandidate(app.candidate_id)}
+                    >
+                      <Text style={styles.viewProfileText}>👤 View Profile</Text>
+                    </Pressable>
                     <Pressable
                       style={styles.addToPipelineButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
+                      onPress={() =>
                         openMoveModal({
                           candidate_id: app.candidate_id,
                           candidate_name: app.candidate_name,
-                        });
-                      }}
+                        })
+                      }
                     >
-                      <Text style={styles.addToPipelineText}>
-                        Add to Pipeline
-                      </Text>
+                      <Text style={styles.addToPipelineText}>➕ Add to Pipeline</Text>
                     </Pressable>
                   </View>
-                </Pressable>
+                </View>
               ))
             )}
           </View>
         )}
 
-        {/* Pipeline Tab */}
         {selectedTab === "pipeline" && (
           <View style={styles.section}>
             {PIPELINE_STAGES.map((stage) => {
@@ -371,7 +359,6 @@ export default function JobDetailScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Move Candidate Modal */}
       <Modal
         visible={moveModalVisible}
         animationType="slide"
@@ -652,27 +639,37 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginBottom: 8,
   },
-  applicationFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F5F5F7",
-  },
   appliedDate: {
     fontSize: 12,
     color: "#8E8E93",
+    marginBottom: 12,
+  },
+  candidateActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  viewProfileButton: {
+    flex: 1,
+    backgroundColor: "#007AFF",
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  viewProfileText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   addToPipelineButton: {
+    flex: 1,
     backgroundColor: "#34C759",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 10,
     borderRadius: 6,
+    alignItems: "center",
   },
   addToPipelineText: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   pipelineStage: {
@@ -793,7 +790,6 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 20,
   },
   modalButton: {
     flex: 1,

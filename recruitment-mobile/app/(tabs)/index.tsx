@@ -44,8 +44,7 @@ export default function HomeScreen() {
       console.log("Applications count:", apps.length);
       setApplications(apps);
 
-      // ADDED CACHE BUSTER: This ensures fresh data from the DB
-      const jobs = await apiGet(`/jobs?t=${Date.now()}`);
+      const jobs = await apiGet("/jobs");
       console.log("Database Jobs Found:", jobs.length);
       
       setRecommendedJobs(jobs.slice(0, 5));
@@ -127,8 +126,7 @@ export default function HomeScreen() {
               style={styles.applicationCard}
               onPress={() => {
                 if (app.job_id) {
-                  // UPDATED ROUTE: Matches standard Detail path
-                  router.push("/jobs/" + app.job_id);
+                  router.push("/job-detail?id=" + app.job_id);
                 }
               }}
             >
@@ -173,12 +171,11 @@ export default function HomeScreen() {
         ) : (
           recommendedJobs.map((job) => (
             <Pressable
-              key={job.id ? job.id.toString() : Math.random().toString()}
+              key={job.id}
               style={styles.jobCard}
               onPress={() => {
                 if (job.id) {
-                  // UPDATED ROUTE: Matches standard Detail path
-                  router.push("/jobs/" + job.id);
+                  router.push(`/job-detail?id=${job.id}`);
                 }
               }}
             >

@@ -48,3 +48,88 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+```
+recruitment-mobile
+├─ .env
+├─ app
+│  ├─ (auth)
+│  │  ├─ candidate-login.tsx.backup.tsx
+│  │  ├─ login-type.tsx.backup.tsx
+│  │  ├─ login.js
+│  │  ├─ recruiter-login- backup.tsx
+│  │  ├─ recruiter-login.js
+│  │  ├─ recruiter-register.js
+│  │  ├─ register.js
+│  │  └─ _layout.tsx
+│  ├─ (recruiter-tabs)
+│  │  ├─ candidates.js
+│  │  ├─ company-profile.js
+│  │  ├─ index.js
+│  │  ├─ jobs.js
+│  │  └─ _layout.js
+│  ├─ (tabs)
+│  │  ├─ .env
+│  │  ├─ career-coach.tsx
+│  │  ├─ edit-profile.jsx
+│  │  ├─ index.tsx
+│  │  ├─ jobs.tsx
+│  │  ├─ profile.jsx
+│  │  └─ _layout.js
+│  ├─ candidate-detail.js
+│  ├─ candidate-settings.js
+│  ├─ edit-company-profile.tsx
+│  ├─ hooks
+│  │  └─ useLogout.js
+│  ├─ index.js
+│  ├─ index.tsx.backup.tsx
+│  ├─ job-detail.tsx
+│  ├─ job-post.tsx
+│  ├─ modal.tsx
+│  ├─ recruiter-settings.js
+│  ├─ services
+│  │  ├─ api.js
+│  │  ├─ auth.js
+│  │  └─ tokenStorage.ts
+│  └─ _layout.js
+├─ app.json
+├─ assets
+│  └─ images
+│     ├─ avatar-placeholder.png
+│     ├─ favicon.png
+│     ├─ icon.png
+│     ├─ partial-react-logo.png
+│     ├─ react-logo.png
+│     ├─ react-logo@2x.png
+│     ├─ react-logo@3x.png
+│     └─ splash-icon.png
+├─ components
+│  ├─ external-link.tsx
+│  ├─ haptic-tab.tsx
+│  ├─ hello-wave.tsx
+│  ├─ parallax-scroll-view.tsx
+│  ├─ themed-text.tsx
+│  ├─ themed-view.tsx
+│  └─ ui
+│     ├─ collapsible.tsx
+│     ├─ icon-symbol.ios.tsx
+│     └─ icon-symbol.tsx
+├─ constants
+│  ├─ filterData.js
+│  ├─ profileData.js
+│  └─ theme.ts
+├─ eslint.config.js
+├─ hooks
+│  ├─ use-color-scheme.ts
+│  ├─ use-color-scheme.web.ts
+│  ├─ use-theme-color.ts
+│  └─ useLogout.js
+├─ index.js
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ scripts
+│  └─ reset-project.js
+└─ tsconfig.json
+
+```

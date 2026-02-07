@@ -17,15 +17,15 @@ export default function JobDetailScreen() {
   const params = useLocalSearchParams();
   const jobId = params.id;
 
-  const [job, setJob] = useState<any>(null);
+  const [job, setJob] = useState(null);
   const [applications, setApplications] = useState([]);
-  const [pipeline, setPipeline] = useState<any>({});
+  const [pipeline, setPipeline] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState("applications");
 
   // Modal for moving candidates
   const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [selectedStage, setSelectedStage] = useState("");
 
   const PIPELINE_STAGES = [
@@ -46,26 +46,37 @@ export default function JobDetailScreen() {
   async function loadJobDetails() {
     try {
       setLoading(true);
+      console.log("📥 Loading job details for job ID:", jobId);
 
       // Load job details
       const jobData = await apiGet(`/jobs/${jobId}`);
-      console.log("Job:", jobData);
+      console.log("✅ Job loaded:", jobData);
       setJob(jobData);
 
-      // Load applications
-      const appsData = await apiGet(`/jobs/${jobId}/applications`);
-      console.log("Applications:", appsData.length);
-      setApplications(appsData);
+      // Load applications with error handling
+      try {
+        const appsData = await apiGet(`/jobs/${jobId}/applications`);
+        console.log("✅ Applications loaded:", appsData.length);
+        setApplications(appsData);
+      } catch (appError) {
+        console.error("⚠️ Could not load applications:", appError);
+        setApplications([]);
+      }
 
-      // Load pipeline
-      const pipelineData = await apiGet(`/pipeline/${jobId}`);
-      console.log("Pipeline:", pipelineData);
-      setPipeline(pipelineData);
+      // Load pipeline with error handling
+      try {
+        const pipelineData = await apiGet(`/pipeline/${jobId}`);
+        console.log("✅ Pipeline loaded:", pipelineData);
+        setPipeline(pipelineData);
+      } catch (pipeError) {
+        console.error("⚠️ Could not load pipeline:", pipeError);
+        setPipeline({});
+      }
 
       setLoading(false);
     } catch (error) {
-      console.error("Error loading job details:", error);
-      Alert.alert("Error", "Failed to load job details");
+      console.error("❌ Error loading job details:", error);
+      Alert.alert("Error", "Failed to load job details: " + (error.message || "Unknown error"));
       setLoading(false);
     }
   }
@@ -79,7 +90,7 @@ export default function JobDetailScreen() {
     try {
       await apiPost("/pipeline/move", {
         candidate_id: selectedCandidate.candidate_id,
-        job_id: parseInt(jobId as string),
+        job_id: parseInt(jobId),
         stage: selectedStage,
       });
 
@@ -90,16 +101,20 @@ export default function JobDetailScreen() {
       
       // Reload data
       loadJobDetails();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error moving candidate:", error);
       Alert.alert("Error", error.message || "Failed to move candidate");
     }
   }
 
-  function openMoveModal(candidate: any, currentStage?: string) {
+  function openMoveModal(candidate, currentStage) {
     setSelectedCandidate(candidate);
     setSelectedStage(currentStage || "shortlisted");
     setMoveModalVisible(true);
+  }
+
+  function handleViewCandidate(candidateId) {
+    router.push(`/candidate-detail?id=${candidateId}`);
   }
 
   if (loading) {
@@ -129,10 +144,8 @@ export default function JobDetailScreen() {
         <Pressable onPress={() => router.back()}>
           <Text style={styles.backButtonText}>← Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Job Details</Text>
-        <Pressable onPress={() => router.push(`/job-post?id=${jobId}` as any)}>
-          <Text style={styles.editButtonText}>Edit</Text>
-        </Pressable>
+        <Text style={styles.headerTitle}>Job Details - Recruiter</Text>
+        <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={styles.content}>
@@ -226,8 +239,12 @@ export default function JobDetailScreen() {
                 </Text>
               </View>
             ) : (
-              applications.map((app: any) => (
-                <View key={app.application_id} style={styles.applicationCard}>
+              applications.map((app) => (
+                <Pressable
+                  key={app.application_id}
+                  style={styles.applicationCard}
+                  onPress={() => handleViewCandidate(app.candidate_id)}
+                >
                   <View style={styles.candidateHeader}>
                     <View style={styles.candidateAvatar}>
                       <Text style={styles.candidateAvatarText}>
@@ -253,19 +270,20 @@ export default function JobDetailScreen() {
                     </Text>
                     <Pressable
                       style={styles.addToPipelineButton}
-                      onPress={() =>
+                      onPress={(e) => {
+                        e.stopPropagation();
                         openMoveModal({
                           candidate_id: app.candidate_id,
                           candidate_name: app.candidate_name,
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Text style={styles.addToPipelineText}>
                         Add to Pipeline
                       </Text>
                     </Pressable>
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
           </View>
@@ -291,10 +309,11 @@ export default function JobDetailScreen() {
                     </Text>
                   </View>
 
-                  {candidates.map((candidate: any) => (
-                    <View
+                  {candidates.map((candidate) => (
+                    <Pressable
                       key={candidate.pipeline_id}
                       style={styles.pipelineCard}
+                      onPress={() => handleViewCandidate(candidate.candidate_id)}
                     >
                       <View style={styles.candidateHeader}>
                         <View style={styles.candidateAvatar}>
@@ -324,20 +343,21 @@ export default function JobDetailScreen() {
                         </Text>
                         <Pressable
                           style={styles.moveButton}
-                          onPress={() =>
-                            openMoveModal(candidate, stage.value)
-                          }
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            openMoveModal(candidate, stage.value);
+                          }}
                         >
                           <Text style={styles.moveButtonText}>Move</Text>
                         </Pressable>
                       </View>
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               );
             })}
 
-            {Object.values(pipeline).every((arr: any) => arr.length === 0) && (
+            {Object.values(pipeline).every((arr) => arr.length === 0) && (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>🔄</Text>
                 <Text style={styles.emptyText}>
@@ -371,7 +391,7 @@ export default function JobDetailScreen() {
             )}
 
             <Text style={styles.modalLabel}>Select Pipeline Stage:</Text>
-            <View style={styles.stagesList}>
+            <ScrollView style={styles.stagesList}>
               {PIPELINE_STAGES.map((stage) => (
                 <Pressable
                   key={stage.value}
@@ -398,7 +418,7 @@ export default function JobDetailScreen() {
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             <View style={styles.modalButtons}>
               <Pressable
@@ -468,11 +488,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#000",
-  },
-  editButtonText: {
-    fontSize: 16,
-    color: "#34C759",
-    fontWeight: "600",
   },
   content: {
     flex: 1,
@@ -745,6 +760,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   stagesList: {
+    maxHeight: 300,
     marginBottom: 20,
   },
   stageItem: {

@@ -1,5 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from "expo-router";
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -51,14 +52,12 @@ export default function RecruiterHomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ total_jobs: 0, open: 0, draft: 0, closed: 0 });
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Delay loading slightly to prioritize UI rendering
-    const timer = setTimeout(() => {
-      loadDashboard();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
+  
+  useFocusEffect(
+  useCallback(() => {
+    loadDashboard();
+  }, [])
+);
 
   async function loadDashboard() {
     try {

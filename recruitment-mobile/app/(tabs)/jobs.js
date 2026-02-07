@@ -86,6 +86,7 @@ export default function JobsScreen() {
       setLoading(false);
     }
   }
+
   function handleSearch() {
     fetchJobs();
   }
@@ -207,7 +208,7 @@ export default function JobsScreen() {
           {jobs.map((job) => (
             <Pressable
               key={job.id}
-              onPress={() => router.push("/job-details?id=" + job.id)}
+              onPress={() => router.push(`/job-detail?id=${job.id}`)}
               style={styles.jobCard}
             >
               <Text style={styles.jobTitle}>{job.title}</Text>

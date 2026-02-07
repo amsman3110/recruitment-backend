@@ -242,6 +242,14 @@ export default function JobsScreen() {
                 </Text>
               )}
 
+              {/* VIEW APPLICANTS BUTTON */}
+              <Pressable
+                style={styles.viewApplicantsButton}
+                onPress={() => router.push(`/job-detail-recruiter?id=${job.id}`)}
+              >
+                <Text style={styles.viewApplicantsText}>👥 View Applicants</Text>
+              </Pressable>
+
               <View style={styles.jobActions}>
                 <Pressable style={styles.actionBtn} onPress={() => openEditModal(job)}>
                   <Text style={styles.actionBtnText}>✏️ Edit</Text>
@@ -435,6 +443,8 @@ const styles = StyleSheet.create({
   statusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   jobDetail: { fontSize: 14, color: "#666", marginBottom: 4 },
   jobDescription: { fontSize: 14, color: "#666", marginTop: 8, marginBottom: 12 },
+  viewApplicantsButton: { backgroundColor: "#007AFF", paddingVertical: 12, borderRadius: 8, alignItems: "center", marginTop: 12, marginBottom: 8 },
+  viewApplicantsText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   jobActions: { flexDirection: "row", gap: 8, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#F5F5F7" },
   actionBtn: { flex: 1, backgroundColor: "#F5F5F7", paddingVertical: 8, borderRadius: 6, alignItems: "center" },
   actionBtnSuccess: { backgroundColor: "#34C759" },
